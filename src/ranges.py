@@ -109,7 +109,7 @@ VS_OPEN = {
     },
     ("BTN", "CO"): {
         "3bet": expand(["JJ+", "AQs+", "AQo+", "AJo", "KQo", "KJo", "KQs", "KJs", "K9s", "QJs", "A8s", "A5s", "A4s"]),
-        "call": expand(["TT", "99", "88", "77", "66", "55", "ATs", "A9s", "KTs", "QTs", "JTs", "T9s", "98s", "87s", "76s"]),
+        "call": expand(["TT", "99", "88", "77", "66", "55", "AJs", "ATs", "A9s", "KTs", "QTs", "JTs", "T9s", "98s", "87s", "76s"]),
     },
     ("SB", "UTG"): {
         "3bet": expand(["QQ+", "AKs", "AKo", "AQo", "KQs", "KJs", "KTs", "QJs", "T9s", "A5s", "A4s"]),
@@ -124,7 +124,7 @@ VS_OPEN = {
         "call": expand([]),
     },
     ("SB", "BTN"): {
-        "3bet": expand(["88+", "ATs", "A9s", "A8s", "A5s", "A4s", "KJs", "KTs", "QTs+", "JTs", "T9s", "AJo+", "KQo", "KJo"]),
+        "3bet": expand(["88+", "AKs", "ATs", "A9s", "A8s", "A5s", "A4s", "KJs", "KTs", "QTs+", "JTs", "T9s", "AJo+", "KQo", "KJo"]),
         "call": expand(["AQs", "AJs", "KQs", "77", "66", "55"]),
     },
     ("BB", "UTG"): {
