@@ -217,6 +217,11 @@ TEMPLATE = r"""<!DOCTYPE html>
 
 <div class="cards" id="summary" data-pane="overview"></div>
 
+<section data-pane="overview"><h2>HUD<span class="zh">整體數據(對照常見合理區間)</span></h2>
+<div class="tablewrap"><table id="hud"><thead><tr>
+<th>指標</th><th>說明</th><th>數值</th><th>樣本</th><th>參考區間</th></tr></thead><tbody></tbody></table></div>
+<p class="note" id="hudNote"></p></section>
+
 <section data-pane="overview"><h2>Winnings<span class="zh">累積盈虧曲線</span></h2>
 <div class="controls">
   <label><select id="winStake"><option value="">全部級別(bb)</option></select></label>
@@ -427,14 +432,15 @@ function parseHand(chunk) {
   if (!hd) return null;
   const h = { id: hd[1], sb: +hd[2], bb: +hd[3], ts: hd[4], seats: {},
               button: null, cards: null, actions: [], collected: 0,
-              uncalled: 0, invested: {}, rake: 0 };
+              uncalled: 0, invested: {}, rake: 0, showdown: false };
   let street = "preflop", sc = {};
   const markers = { "*** FLOP ***": "flop", "*** TURN ***": "turn",
                     "*** RIVER ***": "river", "*** SHOWDOWN ***": "showdown",
                     "*** SUMMARY ***": "summary" };
   for (const line of lines.slice(1)) {
     const mk = Object.keys(markers).find(k => line.startsWith(k));
-    if (mk) { street = markers[mk]; sc = {}; continue; }
+    if (mk) { street = markers[mk];
+      if (street === "showdown") h.showdown = true; sc = {}; continue; }
     if (street === "summary") {
       const rk = line.match(/^Total pot \$[\d.]+ \| Rake \$([\d.]+) \| Jackpot \$([\d.]+)/);
       if (rk) h.rake = +rk[1] + +rk[2];
@@ -587,6 +593,76 @@ function evalDecisions(h, hc) {
   return out;
 }
 
+// ---------- HUD stat flags (computed once at import, stored per hand) ----------
+function statFlags(h) {
+  const pre = h.actions.filter(a => a.street === "preflop");
+  const post = h.actions.filter(a =>
+    ["flop", "turn", "river"].includes(a.street));
+  const heroPre = pre.filter(a => a.p === "Hero");
+  const v = heroPre.some(a => a.kind === "call" || a.kind === "raise") ? 1 : 0;
+  const p = heroPre.some(a => a.kind === "raise") ? 1 : 0;
+
+  // 3-bet & steal opportunities: walk preflop in order
+  const raisers = [];
+  let othersEntered = false, heroActed = false;
+  let t3 = [0, 0], ats = [0, 0];
+  for (const a of pre) {
+    if (a.kind === "post_sb" || a.kind === "post_bb") continue;
+    if (a.p === "Hero") {
+      if (raisers.length === 1 && raisers[0] !== "Hero" && !t3[0]) {
+        t3 = [1, a.kind === "raise" ? 1 : 0];
+      }
+      if (!heroActed && !raisers.length && !othersEntered &&
+          ["CO", "BTN", "SB"].includes(h.pos)) {
+        ats = [1, a.kind === "raise" ? 1 : 0];
+      }
+      heroActed = true;
+    } else if (a.kind === "call") othersEntered = true;
+    if (a.kind === "raise") raisers.push(a.p);
+  }
+
+  const heroFoldedPre = heroPre.some(a => a.kind === "fold");
+  const heroFolded = h.actions.some(a => a.p === "Hero" && a.kind === "fold");
+  const sf = (!heroFoldedPre && (post.length > 0 || h.showdown)) ? 1 : 0;
+  const wt = (sf && h.showdown && !heroFolded) ? 1 : 0;
+  const wsd = (wt && h.collected > 0) ? 1 : 0;
+
+  // postflop aggression: [bets+raises, calls]
+  const heroPost = post.filter(a => a.p === "Hero");
+  const ag = [heroPost.filter(a => a.kind === "bet" || a.kind === "raise").length,
+              heroPost.filter(a => a.kind === "call").length];
+
+  // c-bet lines on flop/turn (index 0/1); simplified, aggressor must keep betting
+  const aggr = [...pre].reverse().find(a => a.kind === "raise")?.p || null;
+  const cb = [[0, 0], [0, 0]];            // [opportunity, did] hero as aggressor
+  const fcb = [[0, 0, 0, 0], [0, 0, 0, 0]]; // [opp, fold, call, raise] facing c-bet
+  if (aggr) {
+    for (let si = 0; si < 2; si++) {
+      const acts = h.actions.filter(a => a.street === ["flop", "turn"][si]);
+      if (!acts.length) break;
+      let betSeen = false, aggrBet = false, heroResponded = false;
+      for (const a of acts) {
+        if (a.p === "Hero") {
+          if (aggr === "Hero") {
+            if (!betSeen && !cb[si][0]) {
+              cb[si][0] = 1; if (a.kind === "bet") { cb[si][1] = 1; }
+            }
+          } else if (betSeen && !heroResponded) {
+            fcb[si][0] = 1;
+            if (a.kind === "fold") fcb[si][1] = 1;
+            else if (a.kind === "call") fcb[si][2] = 1;
+            else if (a.kind === "raise") fcb[si][3] = 1;
+            heroResponded = true;
+          }
+        }
+        if (a.kind === "bet") { betSeen = true; if (a.p === aggr) aggrBet = true; }
+      }
+      if (!aggrBet) break; // no continuation -> next street isn't a c-bet spot
+    }
+  }
+  return { v, p, t3, ats, sf, wt, wsd, ag, cb, fcb };
+}
+
 // hands are stored raw-ish so ranges can be re-evaluated after edits
 function storedRecord(h) {
   const hc = classify(h.cards[0], h.cards[1]);
@@ -596,7 +672,8 @@ function storedRecord(h) {
            net: Math.round(h.net * 100) / 100,
            rk: h.collected > 0 ? Math.round(h.rake * 100) / 100 : 0,
            pf: [spot, opener ? (h.posOf[opener] || "") : null, action],
-           tb: [tb ? (h.posOf[tb] || "") : null, resp] };
+           tb: [tb ? (h.posOf[tb] || "") : null, resp],
+           st: statFlags(h) };
 }
 
 function decisionsOf(rec) {
@@ -652,7 +729,7 @@ const statusEl = document.getElementById("importStatus");
 
 async function importFiles(fileList) {
   const store = loadStore();
-  let added = 0, dup = 0, total = 0;
+  let added = 0, dup = 0, total = 0, upgraded = 0;
   for (const f of fileList) {
     let texts = [];
     try {
@@ -664,14 +741,17 @@ async function importFiles(fileList) {
       for (const h of parseText(text)) {
         total++;
         if (!h.cards || !h.pos) continue;
-        if (store.hands[h.id]) { dup++; continue; }
+        const existing = store.hands[h.id];
+        if (existing && existing.st) { dup++; continue; }
         store.hands[h.id] = storedRecord(h);
-        added++;
+        existing ? upgraded++ : added++;
       }
     }
   }
   saveStore(store);
-  statusEl.textContent = `完成:新增 ${added} 手,略過重複 ${dup} 手(檔案共 ${total} 手)`;
+  statusEl.textContent = `完成:新增 ${added} 手` +
+    (upgraded ? `,升級 ${upgraded} 手舊資料(補上 HUD 統計)` : "") +
+    `,略過重複 ${dup} 手(檔案共 ${total} 手)`;
   renderAll();
 }
 
@@ -978,13 +1058,70 @@ function computeData() {
       }
     }
   }
+  // HUD aggregation over hands that carry stat flags
+  const hud = { n: 0, v: 0, p: 0, t3: [0, 0], ats: [0, 0], sf: 0, wt: 0,
+                wsd: 0, ag: [0, 0], cb: [[0, 0], [0, 0]],
+                fcb: [[0, 0, 0, 0], [0, 0, 0, 0]] };
+  for (const h of hands) {
+    const s = h.st;
+    if (!s) continue;
+    hud.n++; hud.v += s.v; hud.p += s.p;
+    hud.t3[0] += s.t3[0]; hud.t3[1] += s.t3[1];
+    hud.ats[0] += s.ats[0]; hud.ats[1] += s.ats[1];
+    hud.sf += s.sf; hud.wt += s.wt; hud.wsd += s.wsd;
+    hud.ag[0] += s.ag[0]; hud.ag[1] += s.ag[1];
+    for (let i = 0; i < 2; i++) {
+      hud.cb[i][0] += s.cb[i][0]; hud.cb[i][1] += s.cb[i][1];
+      for (let j = 0; j < 4; j++) hud.fcb[i][j] += s.fcb[i][j];
+    }
+  }
+
   const rows = Object.values(sessions).sort((a, b) => a.date < b.date ? -1 : 1);
   rows.forEach(s => {
     s.net_bb = Math.round(s.net_bb * 10) / 10;
     s.bb100 = s.hands ? Math.round(1000 * s.net_bb / s.hands) / 10 : 0;
     s.rate = s.decisions ? Math.round(1000 * s.mist / s.decisions) / 10 : 0;
   });
-  return { hands, rows, mistakes, cats, grid };
+  return { hands, rows, mistakes, cats, grid, hud };
+}
+
+function renderHUD(D) {
+  const H = D.hud;
+  const note = document.getElementById("hudNote");
+  const tbody = document.querySelector("#hud tbody");
+  if (!H.n) {
+    tbody.innerHTML = "";
+    note.textContent = D.hands.length
+      ? "已存的手牌是舊格式,還沒有 HUD 統計——把原本的 .zip/.txt 再拖進上傳區一次,舊資料會自動升級(不會重複)。"
+      : "上傳手牌後,這裡會顯示 VPIP / PFR / 3-bet 等整體數據。";
+    return;
+  }
+  const pct = (num, den) => den ? (100 * num / den) : null;
+  const rows = [
+    ["VPIP", "翻前主動進池率", pct(H.v, H.n), H.n, 22, 27],
+    ["PFR", "翻前加注率", pct(H.p, H.n), H.n, 17, 22],
+    ["3BET", "面對 open 再加注", pct(H.t3[1], H.t3[0]), H.t3[0], 7, 10],
+    ["ATS", "後位偷盲率", pct(H.ats[1], H.ats[0]), H.ats[0], 35, 45],
+    ["CB 翻牌", "翻牌持續下注", pct(H.cb[0][1], H.cb[0][0]), H.cb[0][0], 55, 70],
+    ["CB 轉牌", "轉牌持續下注", pct(H.cb[1][1], H.cb[1][0]), H.cb[1][0], 45, 55],
+    ["FCB 翻牌", "面對翻牌 c-bet 棄牌", pct(H.fcb[0][1], H.fcb[0][0]), H.fcb[0][0], 40, 50],
+    ["FCB 轉牌", "面對轉牌 c-bet 棄牌", pct(H.fcb[1][1], H.fcb[1][0]), H.fcb[1][0], 35, 48],
+    ["WTSD", "見翻牌後打到攤牌", pct(H.wt, H.sf), H.sf, 24, 30],
+    ["WSD", "攤牌勝率", pct(H.wsd, H.wt), H.wt, 50, 55],
+    ["TAF", "翻後侵略頻率 bet+raise / 全動作", pct(H.ag[0], H.ag[0] + H.ag[1]), H.ag[0] + H.ag[1], 25, 35],
+  ];
+  tbody.innerHTML = rows.map(([name, desc, val, n, lo, hi]) => {
+    const disp = val === null ? "-" : val.toFixed(1) + "%";
+    const off = val !== null && n >= 30 && (val < lo || val > hi);
+    return `<tr><td><b>${name}</b></td><td class="note">${desc}</td>` +
+      `<td class="${off ? "neg" : ""}" style="font-weight:600;">${disp}${off ? " ⚠" : ""}</td>` +
+      `<td>${n}</td><td class="note">${lo}–${hi}%</td></tr>`;
+  }).join("");
+  note.textContent = `統計樣本 ${H.n} 手` +
+    (H.n < D.hands.length
+      ? `(另有 ${D.hands.length - H.n} 手舊格式未計入——重新拖入原檔即可升級)`
+      : "") +
+    "。⚠ = 超出參考區間;區間為 6-max 現金桌常見值,僅供對照。";
 }
 
 function renderAll() {
@@ -1022,6 +1159,7 @@ function renderAll() {
   ].map(([k, v]) => `<div class="card"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("")
   : `<div class="card"><div class="v">尚無資料</div><div class="k">先上傳手牌開始追蹤</div></div>`;
 
+  renderHUD(D);
   renderWinnings(D);
 
   const svg = document.getElementById("chart");
