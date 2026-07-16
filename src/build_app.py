@@ -62,7 +62,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   * { box-sizing: border-box; }
   body { font-family:"Segoe UI","Microsoft JhengHei",system-ui,sans-serif;
          margin:0; background:var(--bg); color:var(--ink); line-height:1.55; }
-  .wrap { max-width:960px; margin:0 auto; padding:36px 24px 72px; }
+  .wrap { max-width:1200px; margin:0 auto; padding:36px 24px 72px; }
   header.top { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
                border-bottom:2px solid var(--accent); padding-bottom:14px; }
   h1 { font-size:21px; margin:0; }
@@ -158,6 +158,26 @@ TEMPLATE = r"""<!DOCTYPE html>
   section[data-pane].pane-active { display:block; }
   .cards[data-pane].pane-active { display:grid; }
   section[data-pane] > h2:first-child { margin-top:24px; }
+  .grid2 { gap:0 22px; }
+  .grid2.pane-active { display:grid; grid-template-columns:1fr 1fr; }
+  @media (max-width:900px) { .grid2.pane-active { grid-template-columns:1fr; } }
+  .grid2 svg { width:100%; height:auto; }
+  .hudrow { display:flex; gap:10px 30px; flex-wrap:wrap; margin-bottom:16px; }
+  .donut { text-align:center; }
+  .donut .k { font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .donut .range { font-size:10.5px; color:var(--muted); opacity:.75; }
+  .streets { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+             gap:12px; }
+  .streets .panel b.t { font-size:12px; color:var(--accent);
+                        text-transform:uppercase; letter-spacing:.1em; }
+  .mrow { display:flex; align-items:center; gap:10px; margin-top:10px;
+          font-size:12.5px; }
+  .ml { width:100px; color:var(--muted); }
+  .mbar { flex:1; height:8px; background:var(--track); border-radius:4px;
+          overflow:hidden; }
+  .mbar span { display:block; height:100%; border-radius:4px; }
+  .mv { width:52px; text-align:right; font-variant-numeric:tabular-nums;
+        font-weight:600; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -218,20 +238,26 @@ TEMPLATE = r"""<!DOCTYPE html>
 <div class="cards" id="summary" data-pane="overview"></div>
 
 <section data-pane="overview"><h2>HUD<span class="zh">整體數據(對照常見合理區間)</span></h2>
-<div class="tablewrap"><table id="hud"><thead><tr>
+<div id="hudViz"></div>
+<details style="margin-top:12px;">
+<summary class="note" style="cursor:pointer;">展開明細表格</summary>
+<div class="tablewrap" style="margin-top:8px;"><table id="hud"><thead><tr>
 <th>指標</th><th>說明</th><th>數值</th><th>樣本</th><th>參考區間</th></tr></thead><tbody></tbody></table></div>
+</details>
 <p class="note" id="hudNote"></p></section>
 
-<section data-pane="overview"><h2>Winnings<span class="zh">累積盈虧曲線</span></h2>
+<div class="grid2" data-pane="overview">
+<section><h2>Winnings<span class="zh">累積盈虧曲線</span></h2>
 <div class="controls">
   <label><select id="winStake"><option value="">全部級別(bb)</option></select></label>
   <span class="note" id="winInfo"></span>
 </div>
-<svg id="winChart" viewBox="0 0 820 260" width="820" height="260"
+<svg id="winChart" viewBox="0 0 820 260"
      style="background:var(--surface); border:1px solid var(--line); border-radius:12px;"></svg></section>
 
-<section data-pane="overview"><h2>Trend<span class="zh">翻前偏差率趨勢(目標:逐期下降)</span></h2>
-<svg id="chart" viewBox="0 0 820 260" width="820" height="260"></svg></section>
+<section><h2>Trend<span class="zh">翻前偏差率趨勢(目標:逐期下降)</span></h2>
+<svg id="chart" viewBox="0 0 820 260"></svg></section>
+</div>
 
 <section data-pane="overview"><h2>Sessions<span class="zh">分期明細</span></h2>
 <div class="tablewrap"><table id="sessions"><thead><tr>
@@ -439,8 +465,7 @@ function parseHand(chunk) {
                     "*** SUMMARY ***": "summary" };
   for (const line of lines.slice(1)) {
     const mk = Object.keys(markers).find(k => line.startsWith(k));
-    if (mk) { street = markers[mk];
-      if (street === "showdown") h.showdown = true; sc = {}; continue; }
+    if (mk) { street = markers[mk]; sc = {}; continue; }
     if (street === "summary") {
       const rk = line.match(/^Total pot \$[\d.]+ \| Rake \$([\d.]+) \| Jackpot \$([\d.]+)/);
       if (rk) h.rake = +rk[1] + +rk[2];
@@ -456,6 +481,14 @@ function parseHand(chunk) {
       if (m[1] === "Hero") h.collected += +m[2]; continue; }
     if ((m = line.match(/Uncalled bet \(\$([\d.]+)\) returned to (\S+)/))) {
       if (m[2] === "Hero") h.uncalled += +m[1]; continue; }
+    if (street === "showdown") {
+      // real showdown = someone reveals or mucks (GG prints the marker even
+      // when everyone folds, so the marker alone is not enough)
+      if ((m = line.match(/^(\S+): (?:shows \[|mucks)/))) {
+        h.showdown = true; if (m[1] === "Hero") h.heroSD = true;
+      }
+      continue;
+    }
     if (!["preflop", "flop", "turn", "river"].includes(street)) continue;
     m = line.match(/^(\S+): (folds|checks|calls \$([\d.]+)|bets \$([\d.]+)|raises \$[\d.]+ to \$([\d.]+)|posts small blind \$([\d.]+)|posts big blind \$([\d.]+))( and is all-in)?$/);
     if (!m) continue;
@@ -622,15 +655,14 @@ function statFlags(h) {
   }
 
   const heroFoldedPre = heroPre.some(a => a.kind === "fold");
-  const heroFolded = h.actions.some(a => a.p === "Hero" && a.kind === "fold");
   const sf = (!heroFoldedPre && (post.length > 0 || h.showdown)) ? 1 : 0;
-  const wt = (sf && h.showdown && !heroFolded) ? 1 : 0;
+  const wt = (sf && h.heroSD) ? 1 : 0;   // hero actually showed or mucked
   const wsd = (wt && h.collected > 0) ? 1 : 0;
 
-  // postflop aggression: [bets+raises, calls]
+  // postflop aggression: [bets+raises, passive actions (call/check/fold)]
   const heroPost = post.filter(a => a.p === "Hero");
   const ag = [heroPost.filter(a => a.kind === "bet" || a.kind === "raise").length,
-              heroPost.filter(a => a.kind === "call").length];
+              heroPost.filter(a => ["call", "check", "fold"].includes(a.kind)).length];
 
   // c-bet lines on flop/turn (index 0/1); simplified, aggressor must keep betting
   const aggr = [...pre].reverse().find(a => a.kind === "raise")?.p || null;
@@ -660,8 +692,9 @@ function statFlags(h) {
       if (!aggrBet) break; // no continuation -> next street isn't a c-bet spot
     }
   }
-  return { v, p, t3, ats, sf, wt, wsd, ag, cb, fcb };
+  return { ver: 2, v, p, t3, ats, sf, wt, wsd, ag, cb, fcb };
 }
+const ST_VER = 2;
 
 // hands are stored raw-ish so ranges can be re-evaluated after edits
 function storedRecord(h) {
@@ -742,7 +775,7 @@ async function importFiles(fileList) {
         total++;
         if (!h.cards || !h.pos) continue;
         const existing = store.hands[h.id];
-        if (existing && existing.st) { dup++; continue; }
+        if (existing && existing.st && existing.st.ver === ST_VER) { dup++; continue; }
         store.hands[h.id] = storedRecord(h);
         existing ? upgraded++ : added++;
       }
@@ -1064,7 +1097,7 @@ function computeData() {
                 fcb: [[0, 0, 0, 0], [0, 0, 0, 0]] };
   for (const h of hands) {
     const s = h.st;
-    if (!s) continue;
+    if (!s || s.ver !== ST_VER) continue;
     hud.n++; hud.v += s.v; hud.p += s.p;
     hud.t3[0] += s.t3[0]; hud.t3[1] += s.t3[1];
     hud.ats[0] += s.ats[0]; hud.ats[1] += s.ats[1];
@@ -1085,14 +1118,45 @@ function computeData() {
   return { hands, rows, mistakes, cats, grid, hud };
 }
 
+const isOff = (val, n, lo, hi) => val !== null && n >= 30 && (val < lo || val > hi);
+
+function hudDonut([name, desc, val, n, lo, hi]) {
+  const r = 34, c = 2 * Math.PI * r;
+  const off = isOff(val, n, lo, hi);
+  const color = off ? "var(--loss)" : "var(--accent)";
+  const dash = val === null ? 0 : Math.min(100, val) / 100 * c;
+  return `<div class="donut" title="${desc}:樣本 ${n},參考 ${lo}–${hi}%">
+    <svg viewBox="0 0 90 90" width="92" height="92" role="img" aria-label="${name}">
+      <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--track)" stroke-width="8"/>
+      <circle cx="45" cy="45" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+        stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${c.toFixed(1)}"
+        transform="rotate(-90 45 45)"/>
+      <text x="45" y="50" text-anchor="middle" font-size="17" font-weight="650"
+        fill="var(--ink)">${val === null ? "-" : Math.round(val) + "%"}</text>
+    </svg>
+    <div class="k">${name}</div><div class="range">${lo}–${hi}%</div></div>`;
+}
+
+function hudMeter([name, desc, val, n, lo, hi]) {
+  const off = isOff(val, n, lo, hi);
+  const color = off ? "var(--loss)" : "var(--accent)";
+  const disp = val === null ? "-" : val.toFixed(1) + "%";
+  return `<div class="mrow" title="${desc}:樣本 ${n},參考 ${lo}–${hi}%">
+    <span class="ml">${name}</span>
+    <span class="mbar"><span style="width:${val === null ? 0 : Math.min(100, val)}%;
+      background:${color};"></span></span>
+    <span class="mv ${off ? "neg" : ""}">${disp}</span></div>`;
+}
+
 function renderHUD(D) {
   const H = D.hud;
   const note = document.getElementById("hudNote");
   const tbody = document.querySelector("#hud tbody");
+  const viz = document.getElementById("hudViz");
   if (!H.n) {
-    tbody.innerHTML = "";
+    tbody.innerHTML = ""; viz.innerHTML = "";
     note.textContent = D.hands.length
-      ? "已存的手牌是舊格式,還沒有 HUD 統計——把原本的 .zip/.txt 再拖進上傳區一次,舊資料會自動升級(不會重複)。"
+      ? "已存的手牌還沒有(新版)HUD 統計——把原本的 .zip/.txt 再拖進上傳區一次,舊資料會自動升級(不會重複)。"
       : "上傳手牌後,這裡會顯示 VPIP / PFR / 3-bet 等整體數據。";
     return;
   }
@@ -1108,20 +1172,28 @@ function renderHUD(D) {
     ["FCB 轉牌", "面對轉牌 c-bet 棄牌", pct(H.fcb[1][1], H.fcb[1][0]), H.fcb[1][0], 35, 48],
     ["WTSD", "見翻牌後打到攤牌", pct(H.wt, H.sf), H.sf, 24, 30],
     ["WSD", "攤牌勝率", pct(H.wsd, H.wt), H.wt, 50, 55],
-    ["TAF", "翻後侵略頻率 bet+raise / 全動作", pct(H.ag[0], H.ag[0] + H.ag[1]), H.ag[0] + H.ag[1], 25, 35],
+    ["TAF", "翻後侵略頻率(bet+raise ÷ 所有翻後動作)", pct(H.ag[0], H.ag[0] + H.ag[1]), H.ag[0] + H.ag[1], 25, 35],
   ];
+  viz.innerHTML =
+    `<div class="hudrow">${rows.slice(0, 4).map(hudDonut).join("")}</div>` +
+    `<div class="streets">` +
+    [["翻牌", [rows[4], rows[6]]],
+     ["轉牌", [rows[5], rows[7]]],
+     ["攤牌 / 整體", [rows[8], rows[9], rows[10]]]].map(([t, rs]) =>
+      `<div class="panel"><b class="t">${t}</b>${rs.map(hudMeter).join("")}</div>`
+    ).join("") + `</div>`;
   tbody.innerHTML = rows.map(([name, desc, val, n, lo, hi]) => {
     const disp = val === null ? "-" : val.toFixed(1) + "%";
-    const off = val !== null && n >= 30 && (val < lo || val > hi);
+    const off = isOff(val, n, lo, hi);
     return `<tr><td><b>${name}</b></td><td class="note">${desc}</td>` +
       `<td class="${off ? "neg" : ""}" style="font-weight:600;">${disp}${off ? " ⚠" : ""}</td>` +
       `<td>${n}</td><td class="note">${lo}–${hi}%</td></tr>`;
   }).join("");
   note.textContent = `統計樣本 ${H.n} 手` +
     (H.n < D.hands.length
-      ? `(另有 ${D.hands.length - H.n} 手舊格式未計入——重新拖入原檔即可升級)`
+      ? `(另有 ${D.hands.length - H.n} 手是舊版統計未計入——重新拖入原檔即可升級)`
       : "") +
-    "。⚠ = 超出參考區間;區間為 6-max 現金桌常見值,僅供對照。";
+    "。紅色 = 超出參考區間;區間為 6-max 現金桌常見值,僅供對照。";
 }
 
 function renderAll() {
