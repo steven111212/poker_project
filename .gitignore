@@ -1,0 +1,8 @@
+# personal hand-history data — not for the public repo
+hands/
+report.md
+*.xls
+
+# python
+__pycache__/
+*.pyc

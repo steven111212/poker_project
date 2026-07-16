@@ -1,0 +1,1306 @@
+"""Build the shareable client-side app (index.html).
+
+Everything runs in the browser: zip decompression (DecompressionStream),
+GG hand-history parsing, preflop range checking against user-editable
+weighted ranges (defaults injected from ranges.py), storage in localStorage.
+
+Usage: python src/build_app.py [-o index.html]
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from dashboard import build_range_tables
+
+
+def weighted_defaults():
+    """Convert pure-strategy tables to weight form {r, c, f} (percent)."""
+    out = {}
+    for key, table in build_range_tables().items():
+        wt = {}
+        for hand, act in table.items():
+            if key == "RFI SB" and act == "raise":
+                wt[hand] = {"r": 75, "c": 25, "f": 0}   # raise or limp both fine
+            elif key == "RFI SB" and act == "limp":
+                wt[hand] = {"r": 25, "c": 75, "f": 0}
+            elif act in ("raise", "3bet", "4bet"):
+                wt[hand] = {"r": 100, "c": 0, "f": 0}
+            elif act in ("call", "limp"):
+                wt[hand] = {"r": 0, "c": 100, "f": 0}
+            else:
+                wt[hand] = {"r": 0, "c": 0, "f": 100}
+        out[key] = wt
+    return out
+
+
+TEMPLATE = r"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>撲克成長紀錄</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#10151a; --surface:#18202a; --surface2:#1f2937; --line:#2a3644;
+    --ink:#e8ebee; --muted:#8d9aa8; --accent:#3aa87c; --accent-soft:#234639;
+    --win:#4cc38a; --loss:#e5635c; --track:#2a3644;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f2f4f3; --surface:#fff; --surface2:#e9edeb; --line:#d5dcd8;
+      --ink:#1c2420; --muted:#64716a; --accent:#22815e; --accent-soft:#d7eae0;
+      --win:#1f8a5d; --loss:#c23e38; --track:#dde3df; }
+  }
+  :root[data-theme="dark"] { --bg:#10151a; --surface:#18202a; --surface2:#1f2937;
+    --line:#2a3644; --ink:#e8ebee; --muted:#8d9aa8; --accent:#3aa87c;
+    --accent-soft:#234639; --win:#4cc38a; --loss:#e5635c; --track:#2a3644; }
+  :root[data-theme="light"] { --bg:#f2f4f3; --surface:#fff; --surface2:#e9edeb;
+    --line:#d5dcd8; --ink:#1c2420; --muted:#64716a; --accent:#22815e;
+    --accent-soft:#d7eae0; --win:#1f8a5d; --loss:#c23e38; --track:#dde3df; }
+  * { box-sizing: border-box; }
+  body { font-family:"Segoe UI","Microsoft JhengHei",system-ui,sans-serif;
+         margin:0; background:var(--bg); color:var(--ink); line-height:1.55; }
+  .wrap { max-width:960px; margin:0 auto; padding:36px 24px 72px; }
+  header.top { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+               border-bottom:2px solid var(--accent); padding-bottom:14px; }
+  h1 { font-size:21px; margin:0; }
+  .sub { color:var(--muted); font-size:12.5px; }
+  h2 { font-size:12px; margin:44px 0 10px; color:var(--accent);
+       text-transform:uppercase; letter-spacing:.14em; font-weight:600; }
+  h2 .zh { display:block; text-transform:none; letter-spacing:0;
+           color:var(--ink); font-size:16.5px; margin-top:2px; }
+  .panel { background:var(--surface); border:1px solid var(--line);
+           border-radius:12px; padding:18px 20px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+           gap:12px; margin-top:20px; }
+  .card { background:var(--surface); border:1px solid var(--line);
+          border-radius:12px; padding:14px 16px; }
+  .card .v { font-size:24px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .card .k { font-size:12px; color:var(--muted); margin-top:2px; }
+  table { border-collapse:collapse; font-size:13px; width:100%;
+          font-variant-numeric:tabular-nums; }
+  .tablewrap { overflow-x:auto; background:var(--surface);
+               border:1px solid var(--line); border-radius:12px; padding:6px 14px 10px; }
+  th,td { padding:7px 12px; border-bottom:1px solid var(--line); text-align:right; }
+  tbody tr:last-child td { border-bottom:none; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  td:first-child, th:first-child { text-align:left; }
+  .pos { color:var(--win); } .neg { color:var(--loss); }
+  #chart { background:var(--surface); border:1px solid var(--line);
+           border-radius:12px; width:100%; height:auto; }
+  .gridwrap { display:grid; grid-template-columns:repeat(13,minmax(30px,1fr)); gap:2px; }
+  .cell { height:30px; font-size:10px; display:flex; align-items:center;
+          justify-content:center; border-radius:4px; background:var(--surface2);
+          color:var(--muted); }
+  .big .cell { height:42px; font-size:11px; position:relative; color:#f2f2f2;
+               text-shadow:0 1px 2px rgba(0,0,0,.55); user-select:none; }
+  .cell.clickable { cursor:pointer; }
+  .cell.hl { animation:hl 1.6s ease 3; }
+  @keyframes hl { 0%,100% { box-shadow:none; }
+                  50% { box-shadow:0 0 0 3px var(--accent) inset, 0 0 10px var(--accent); } }
+  #handDetail table { margin-top:6px; }
+  #handDetail .close { float:right; background:transparent; color:var(--muted);
+                       border:none; font-size:16px; padding:0 4px; }
+  button.mini { padding:3px 10px; font-size:12px; }
+  .big.editing .cell { cursor:crosshair; }
+  .badge { position:absolute; top:1px; right:2px; font-size:9px; font-weight:700;
+           padding:0 4px; border-radius:6px; color:#10151a; text-shadow:none; }
+  .custommark { position:absolute; bottom:1px; right:3px; font-size:9px;
+                color:#fff; opacity:.8; text-shadow:none; }
+  .lg { display:inline-block; margin-right:12px; }
+  .lg span { display:inline-block; width:10px; height:10px; border-radius:2px;
+             margin-right:4px; vertical-align:-1px; }
+  select, input[type=number], input[type=text] {
+    background:var(--surface); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:5px 10px; font-size:13px; }
+  input[type=number] { width:64px; }
+  select:focus-visible, input:focus-visible, button:focus-visible {
+    outline:2px solid var(--accent); outline-offset:1px; }
+  label { font-size:13px; }
+  .note { color:var(--muted); font-size:12px; }
+  .controls { display:flex; align-items:center; gap:14px; margin-bottom:10px;
+              flex-wrap:wrap; }
+  button { background:var(--accent); color:#fff; border:none; border-radius:8px;
+           padding:7px 16px; font-size:13.5px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink);
+                 border:1px solid var(--line); }
+  button.danger { background:transparent; color:var(--loss);
+                  border:1px solid var(--line); }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:28px;
+          text-align:center; color:var(--muted); cursor:pointer;
+          transition:border-color .2s, background .2s; }
+  #drop.over { border-color:var(--accent); background:var(--accent-soft); }
+  #drop b { color:var(--ink); }
+  .hidden { display:none; }
+  #editorBar { background:var(--surface2); border-radius:10px; padding:10px 14px;
+               margin-bottom:10px; }
+  textarea { width:100%; background:var(--surface); color:var(--ink);
+             border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+             font-size:13.5px; font-family:inherit; line-height:1.55;
+             resize:vertical; }
+  textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .tag { display:inline-block; background:var(--accent-soft); color:var(--accent);
+         border-radius:999px; padding:1px 9px; font-size:11.5px; margin-right:6px; }
+  .entry { background:var(--surface); border:1px solid var(--line);
+           border-radius:12px; padding:14px 16px; margin-top:10px; }
+  .entry .body { white-space:pre-wrap; margin-top:6px; font-size:13.5px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; position:sticky; top:0; z-index:5;
+          background:var(--bg); padding:14px 0 12px; margin-bottom:4px;
+          border-bottom:1px solid var(--line); }
+  .tabs button { background:transparent; color:var(--muted);
+                 border:1px solid var(--line); border-radius:999px;
+                 padding:7px 18px; font-size:13.5px; }
+  .tabs button.active { background:var(--accent); color:#fff;
+                        border-color:var(--accent); font-weight:600; }
+  [data-pane] { display:none; }
+  section[data-pane].pane-active { display:block; }
+  .cards[data-pane].pane-active { display:grid; }
+  section[data-pane] > h2:first-child { margin-top:24px; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <h1>撲克成長紀錄</h1>
+  <span class="sub">Natural8 / GG 手牌 · 6max 100bb · 資料只存在你的瀏覽器</span>
+</header>
+
+<nav class="tabs" id="tabs" aria-label="主導覽">
+  <button data-tab="overview">📊 總覽</button>
+  <button data-tab="review">🔍 檢討</button>
+  <button data-tab="journal">📓 日誌</button>
+  <button data-tab="data">📂 資料</button>
+</nav>
+
+<section data-pane="data">
+<h2>Import<span class="zh">上傳手牌</span></h2>
+<div class="panel">
+  <div id="drop"><b>把 Natural8 匯出的 .zip 或 .txt 拖到這裡</b><br>
+    或點擊選擇檔案(可多選;重複的手牌會自動去重)</div>
+  <input type="file" id="fileInput" class="hidden" multiple accept=".zip,.txt">
+  <div id="importStatus" class="note" style="margin-top:10px;"></div>
+  <div class="controls" style="margin-top:12px; margin-bottom:0;">
+    <span class="note" id="storeInfo"></span>
+    <button class="ghost" id="backupBtn">匯出完整備份</button>
+    <button class="ghost" id="restoreBtn">匯入備份</button>
+    <input type="file" id="restoreFile" class="hidden" accept=".json">
+    <button class="danger" id="clearBtn">清空所有手牌資料</button>
+  </div>
+  <div class="note" style="margin-top:6px;">備份包含:手牌、手牌筆記、Session 日記、目標、自訂範圍。換裝置或清瀏覽器資料前請先匯出。</div>
+</div>
+</section>
+
+<section data-pane="overview">
+<h2>Goal<span class="zh">升級目標</span></h2>
+<div class="panel">
+  <div class="controls">
+    <label>級別
+      <select id="goalStake">
+        <option value="0.05">NL5</option><option value="0.1" selected>NL10</option>
+        <option value="0.25">NL25</option><option value="0.5">NL50</option>
+      </select></label>
+    <label>目標金額 $ <input type="number" id="goalTarget" value="500" min="1"></label>
+    <button id="goalSave">儲存</button>
+  </div>
+  <div style="background:var(--track); border-radius:8px; height:24px; overflow:hidden;">
+    <div id="goalBar" style="height:100%; border-radius:8px; background:var(--win);
+         width:0%; transition:width .6s;"></div>
+  </div>
+  <div id="goalText" style="margin-top:10px; font-size:14px;
+       font-variant-numeric:tabular-nums;"></div>
+  <div class="note" style="margin-top:4px;">金額為扣除抽水後實拿;未含返水。只統計已上傳的手牌。</div>
+</div>
+</section>
+
+<div class="cards" id="summary" data-pane="overview"></div>
+
+<section data-pane="overview"><h2>Winnings<span class="zh">累積盈虧曲線</span></h2>
+<div class="controls">
+  <label><select id="winStake"><option value="">全部級別(bb)</option></select></label>
+  <span class="note" id="winInfo"></span>
+</div>
+<svg id="winChart" viewBox="0 0 820 260" width="820" height="260"
+     style="background:var(--surface); border:1px solid var(--line); border-radius:12px;"></svg></section>
+
+<section data-pane="overview"><h2>Trend<span class="zh">翻前偏差率趨勢(目標:逐期下降)</span></h2>
+<svg id="chart" viewBox="0 0 820 260" width="820" height="260"></svg></section>
+
+<section data-pane="overview"><h2>Sessions<span class="zh">分期明細</span></h2>
+<div class="tablewrap"><table id="sessions"><thead><tr>
+<th>日期</th><th>手數</th><th>盈虧(bb)</th><th>bb/100</th>
+<th>判定決策</th><th>偏差</th><th>偏差率</th></tr></thead><tbody></tbody></table></div></section>
+
+<section data-pane="journal"><h2>Journal<span class="zh">Session 日記</span></h2>
+<div class="panel">
+  <div class="controls">
+    <label>日期 <select id="diaryDate"></select></label>
+    <span class="note" id="diaryStats"></span>
+  </div>
+  <textarea id="diaryText" rows="4"
+    placeholder="今天狀態如何?哪裡打得好、哪裡 tilt 了、下次要注意什麼…"></textarea>
+  <div class="controls" style="margin:10px 0 0;">
+    <button id="diarySave">儲存日記</button>
+    <span class="note" id="diaryMsg"></span>
+  </div>
+</div>
+<div id="diaryList"></div></section>
+
+<section data-pane="review"><h2>Leak types<span class="zh">偏差類型</span></h2>
+<div class="tablewrap" style="max-width:460px;">
+<table id="cats"><thead><tr><th>類型</th><th>次數</th></tr></thead><tbody></tbody></table>
+</div></section>
+
+<section data-pane="review"><h2>Ranges<span class="zh">範圍表(可自訂)</span></h2>
+<div class="controls">
+  <select id="spotSel"></select>
+  <label><input type="checkbox" id="showErr" checked> 疊上我的錯誤</label>
+  <label><input type="checkbox" id="editMode"> 編輯模式</label>
+</div>
+<div id="editorBar" class="hidden">
+  <div class="controls" style="margin-bottom:6px;">
+    <label>筆刷
+      <select id="brushSel">
+        <option value="r">raise 100%</option>
+        <option value="c">call/limp 100%</option>
+        <option value="f">fold 100%</option>
+        <option value="mix">自訂混合</option>
+        <option value="reset">恢復此格預設</option>
+      </select></label>
+    <span id="mixInputs" class="hidden">
+      <label>raise% <input type="number" id="mixR" value="50" min="0" max="100"></label>
+      <label>call% <input type="number" id="mixC" value="50" min="0" max="100"></label>
+      <span class="note">fold% 自動 = 剩餘</span>
+    </span>
+  </div>
+  <div class="controls" style="margin-bottom:0;">
+    <span class="note" id="customInfo"></span>
+    <button class="ghost" id="resetTable">重設此表為預設</button>
+    <button class="ghost" id="exportRanges">匯出自訂範圍</button>
+    <button class="ghost" id="importRangesBtn">匯入</button>
+    <input type="file" id="importRanges" class="hidden" accept=".json">
+  </div>
+  <div class="note" style="margin-top:6px;">在格子上點擊或按住拖曳塗刷。判定規則:你的動作在該格權重 ≥20% 即算正確。</div>
+</div>
+<div id="legend" class="note" style="margin-bottom:8px;"></div>
+<div class="gridwrap big" id="rangeGrid"></div></section>
+
+<section data-pane="review"><h2>Heatmap<span class="zh">13×13 起手牌:紅=常打錯(點紅格看詳情)</span></h2>
+<div class="gridwrap" id="grid"></div>
+<div id="handDetail" class="panel hidden" style="margin-top:12px;"></div></section>
+
+<section data-pane="review"><h2>Mistakes<span class="zh">偏差清單</span></h2>
+<details id="mistDetails">
+<summary style="cursor:pointer; color:var(--muted); font-size:13px;
+  padding:10px 0;">展開完整清單(平常用熱力圖點格子看就好)</summary>
+<div class="controls" style="margin-top:8px;"><select id="dateFilter"><option value="">全部期別</option></select></div>
+<div class="tablewrap"><table id="mistakes"><thead><tr>
+<th>日期</th><th>手牌</th><th>位置</th><th>情境</th><th>你的動作</th>
+<th>基準</th><th>類型</th><th>結果(bb)</th><th>Hand ID</th><th>筆記</th></tr></thead><tbody></tbody></table></div>
+<p class="note">預設基準:GTO Wizard 6max NL25 100bb 簡化版;你可在範圍表區自訂覆蓋。</p>
+</details></section>
+
+<section data-pane="journal"><h2>Notes<span class="zh">手牌筆記</span></h2>
+<div id="noteEditor" class="panel hidden" style="margin-bottom:12px;">
+  <div id="noteTitle" style="font-weight:600;"></div>
+  <textarea id="noteText" rows="4" style="margin-top:8px;"
+    placeholder="這手的檢討:當時的想法、錯在哪、正確思路是什麼…"></textarea>
+  <div class="controls" style="margin:10px 0 0;">
+    <label>標籤 <input type="text" id="noteTags" style="width:220px;"
+      placeholder="過度跟注, 情緒手(逗號分隔)"></label>
+    <button id="noteSave">儲存筆記</button>
+    <button class="ghost" id="noteCancel">關閉</button>
+    <button class="danger" id="noteDelete">刪除此筆記</button>
+  </div>
+</div>
+<div id="notesList"><p class="note">在熱力圖詳情或偏差清單點「＋筆記」,幫任何一手牌寫下檢討。</p></div>
+</section>
+</div>
+
+<script>
+"use strict";
+const DEFAULTS = /*TABLES*/;
+const RANKS = "AKQJT98765432";
+const STORE_KEY = "poker_hands_v2", GOAL_KEY = "poker_goal_v1",
+      RANGE_KEY = "poker_ranges_v1", NOTES_KEY = "poker_notes_v1",
+      DIARY_KEY = "poker_diary_v1";
+const FREQ_OK = 20; // action weight (%) required to count as correct
+const POSN = ["UTG", "HJ", "CO", "BTN", "SB", "BB"];
+
+// all recognizable spots (defaults may not exist for all -> user can create)
+const ALL_SPOTS = [];
+["UTG","HJ","CO","BTN","SB"].forEach(p => ALL_SPOTS.push("RFI " + p));
+for (let i = 0; i < 6; i++) for (let j = 0; j < i; j++)
+  ALL_SPOTS.push(`${POSN[i]} vs ${POSN[j]} open`);
+for (let i = 0; i < 5; i++) for (let j = i + 1; j < 6; j++)
+  ALL_SPOTS.push(`${POSN[i]} open 被 ${POSN[j]} 3bet`);
+
+function allClasses() {
+  const out = [];
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++)
+    out.push(i === j ? RANKS[i] + RANKS[j] :
+      (i < j ? RANKS[i] + RANKS[j] + "s" : RANKS[j] + RANKS[i] + "o"));
+  return out;
+}
+const CLASSES = allClasses();
+
+// ---------- storage ----------
+const loadJSON = (k, dflt) => {
+  try { return JSON.parse(localStorage.getItem(k)) ?? dflt; } catch { return dflt; }
+};
+function loadStore() { return loadJSON(STORE_KEY, { hands: {} }); }
+function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+function loadGoal() { return loadJSON(GOAL_KEY, { bb: 0.1, target: 500 }); }
+function loadCustom() { return loadJSON(RANGE_KEY, {}); }
+function saveCustom(c) { localStorage.setItem(RANGE_KEY, JSON.stringify(c)); }
+function loadNotes() { return loadJSON(NOTES_KEY, {}); }
+function saveNotes(n) { localStorage.setItem(NOTES_KEY, JSON.stringify(n)); }
+function loadDiary() { return loadJSON(DIARY_KEY, {}); }
+function saveDiary(d) { localStorage.setItem(DIARY_KEY, JSON.stringify(d)); }
+const esc = s => String(s).replace(/[&<>"]/g,
+  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const FOLD100 = { r: 0, c: 0, f: 100 };
+function cellWeights(key, hand) {
+  const cust = loadCustom();
+  if (cust[key] && cust[key][hand]) return cust[key][hand];
+  return (DEFAULTS[key] && DEFAULTS[key][hand]) || FOLD100;
+}
+function spotExists(key) {
+  return !!DEFAULTS[key] || !!loadCustom()[key];
+}
+
+// ---------- zip ----------
+async function readZip(buf) {
+  const dv = new DataView(buf);
+  let i = buf.byteLength - 22;
+  while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+  if (i < 0) throw new Error("不是有效的 zip 檔");
+  const count = dv.getUint16(i + 10, true);
+  let off = dv.getUint32(i + 16, true);
+  const files = [];
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(off, true) !== 0x02014b50) break;
+    const method = dv.getUint16(off + 10, true);
+    const csize = dv.getUint32(off + 20, true);
+    const nameLen = dv.getUint16(off + 28, true);
+    const extraLen = dv.getUint16(off + 30, true);
+    const cmtLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(new Uint8Array(buf, off + 46, nameLen));
+    const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
+    const start = lho + 30 + lnl + lel;
+    files.push({ name, method, data: buf.slice(start, start + csize) });
+    off += 46 + nameLen + extraLen + cmtLen;
+  }
+  const out = [];
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".txt")) continue;
+    let bytes;
+    if (f.method === 0) bytes = f.data;
+    else if (f.method === 8) {
+      const ds = new DecompressionStream("deflate-raw");
+      bytes = await new Response(new Response(f.data).body.pipeThrough(ds)).arrayBuffer();
+    } else continue;
+    out.push({ name: f.name, text: new TextDecoder().decode(bytes) });
+  }
+  return out;
+}
+
+// ---------- hand parsing ----------
+const POS_BY_COUNT = { 2: ["BB", "SB"], 3: ["SB", "BB", "BTN"],
+  4: ["SB", "BB", "CO", "BTN"], 5: ["SB", "BB", "HJ", "CO", "BTN"],
+  6: ["SB", "BB", "UTG", "HJ", "CO", "BTN"] };
+
+function classify(c1, c2) {
+  let [r1, s1] = c1, [r2, s2] = c2;
+  if (RANKS.indexOf(r1) > RANKS.indexOf(r2)) { [r1, r2] = [r2, r1]; [s1, s2] = [s2, s1]; }
+  return r1 === r2 ? r1 + r2 : r1 + r2 + (s1 === s2 ? "s" : "o");
+}
+
+function parseHand(chunk) {
+  const lines = chunk.split("\n").map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  const hd = lines[0].match(/^Poker Hand #(\S+): Hold'em No Limit \(\$([\d.]+)\/\$([\d.]+)\) - (.+)$/);
+  if (!hd) return null;
+  const h = { id: hd[1], sb: +hd[2], bb: +hd[3], ts: hd[4], seats: {},
+              button: null, cards: null, actions: [], collected: 0,
+              uncalled: 0, invested: {}, rake: 0 };
+  let street = "preflop", sc = {};
+  const markers = { "*** FLOP ***": "flop", "*** TURN ***": "turn",
+                    "*** RIVER ***": "river", "*** SHOWDOWN ***": "showdown",
+                    "*** SUMMARY ***": "summary" };
+  for (const line of lines.slice(1)) {
+    const mk = Object.keys(markers).find(k => line.startsWith(k));
+    if (mk) { street = markers[mk]; sc = {}; continue; }
+    if (street === "summary") {
+      const rk = line.match(/^Total pot \$[\d.]+ \| Rake \$([\d.]+) \| Jackpot \$([\d.]+)/);
+      if (rk) h.rake = +rk[1] + +rk[2];
+      continue;
+    }
+    let m;
+    if ((m = line.match(/Seat #(\d+) is the button/))) { h.button = +m[1]; continue; }
+    if ((m = line.match(/^Seat (\d+): (\S+) \(\$([\d.]+) in chips\)/))) {
+      h.seats[+m[1]] = m[2]; continue; }
+    if ((m = line.match(/^Dealt to Hero \[(\w\w) (\w\w)\]/))) {
+      h.cards = [m[1], m[2]]; continue; }
+    if ((m = line.match(/^(\S+) collected \$([\d.]+) from pot/))) {
+      if (m[1] === "Hero") h.collected += +m[2]; continue; }
+    if ((m = line.match(/Uncalled bet \(\$([\d.]+)\) returned to (\S+)/))) {
+      if (m[2] === "Hero") h.uncalled += +m[1]; continue; }
+    if (!["preflop", "flop", "turn", "river"].includes(street)) continue;
+    m = line.match(/^(\S+): (folds|checks|calls \$([\d.]+)|bets \$([\d.]+)|raises \$[\d.]+ to \$([\d.]+)|posts small blind \$([\d.]+)|posts big blind \$([\d.]+))( and is all-in)?$/);
+    if (!m) continue;
+    const p = m[1];
+    let kind, newTotal, prev = sc[p] || 0;
+    if (m[2] === "folds") { kind = "fold"; newTotal = prev; }
+    else if (m[2] === "checks") { kind = "check"; newTotal = prev; }
+    else if (m[3] !== undefined) { kind = "call"; newTotal = prev + +m[3]; }
+    else if (m[4] !== undefined) { kind = "bet"; newTotal = prev + +m[4]; }
+    else if (m[5] !== undefined) { kind = "raise"; newTotal = +m[5]; }
+    else if (m[6] !== undefined) { kind = "post_sb"; newTotal = prev + +m[6]; }
+    else { kind = "post_bb"; newTotal = prev + +m[7]; }
+    sc[p] = newTotal;
+    h.invested[p] = (h.invested[p] || 0) + (newTotal - prev);
+    h.actions.push({ street, p, kind });
+  }
+  h.posOf = {};
+  const nums = Object.keys(h.seats).map(Number).sort((a, b) => a - b);
+  if (h.button !== null && nums.includes(h.button)) {
+    const idx = nums.indexOf(h.button);
+    const ordered = nums.slice(idx + 1).concat(nums.slice(0, idx + 1));
+    const names = POS_BY_COUNT[ordered.length] || POS_BY_COUNT[6];
+    ordered.forEach((s, k) => { h.posOf[h.seats[s]] = names[k]; });
+  }
+  h.pos = h.posOf["Hero"] || "";
+  h.net = h.collected - (h.invested["Hero"] || 0) + h.uncalled;
+  return h;
+}
+
+function parseText(text) {
+  return text.split(/\r?\n\s*\r?\n(?=Poker Hand #)/).map(parseHand).filter(Boolean);
+}
+
+// ---------- preflop evaluation ----------
+function preflopSpot(h) {
+  const raises = []; let limpers = 0, callersOfRaise = 0;
+  for (const a of h.actions) {
+    if (a.street !== "preflop") continue;
+    if (a.p === "Hero" && ["fold", "call", "raise", "check"].includes(a.kind)) {
+      if (!raises.length && !limpers) return ["rfi", null, a.kind];
+      if (raises.length === 1 && !callersOfRaise && !limpers)
+        return ["vs_open", raises[0], a.kind];
+      return [null, null, a.kind];
+    }
+    if (a.kind === "raise") raises.push(a.p);
+    else if (a.kind === "call") { raises.length ? callersOfRaise++ : limpers++; }
+  }
+  return [null, null, null];
+}
+
+function vs3betSpot(h) {
+  const raises = [];
+  for (const a of h.actions) {
+    if (a.street !== "preflop") continue;
+    if (a.kind === "raise") { raises.push(a.p); continue; }
+    if (a.p === "Hero" && ["fold", "call"].includes(a.kind)
+        && raises.length === 2 && raises[0] === "Hero")
+      return [raises[1], a.kind];
+  }
+  if (raises.length >= 3 && raises[0] === "Hero" && raises[2] === "Hero")
+    return [raises[1], "raise"];
+  return [null, null];
+}
+
+const RAISE_NAME = { rfi: "raise", vs_open: "3bet", vs_3bet: "4bet" };
+function weightsLabel(w, kind) {
+  const parts = [];
+  if (w.r > 0) parts.push(`${RAISE_NAME[kind]} ${w.r}`);
+  if (w.c > 0) parts.push(`${kind === "rfi" ? "limp/call" : "call"} ${w.c}`);
+  if (w.f > 0) parts.push(`fold ${w.f}`);
+  return parts.join(" / ") || "fold 100";
+}
+
+function categorize(kind, actual, w) {
+  const dom = w.r >= w.c && w.r >= w.f ? "raise" : (w.c >= w.f ? "call" : "fold");
+  if (kind === "rfi") {
+    if (actual === "fold") return "RFI 太緊(該 open 沒 open)";
+    if (actual === "limp/call") return "RFI 用 limp";
+    return "RFI 太鬆(open 過寬)";
+  }
+  if (actual === "fold") return "太緊(該防守沒防守)";
+  if (dom === "raise" && actual === "call") return `該 ${RAISE_NAME[kind]} 卻 call`;
+  if (dom === "fold" && actual !== "fold")
+    return actual === "call" ? "call 過鬆" : `${RAISE_NAME[kind]} 選牌錯`;
+  if (dom === "call" && actual !== "call") return `該 call 卻 ${RAISE_NAME[kind]}`;
+  return "應對錯";
+}
+
+function judge(key, hand, kind, actual) {
+  // actual in {"raise","call","fold"} weight-space
+  const w = cellWeights(key, hand);
+  const freq = actual === "raise" ? w.r : actual === "call" ? w.c : w.f;
+  return { ok: freq >= FREQ_OK, w };
+}
+
+function evalDecisions(h, hc) {
+  const out = [];
+  const [spot, opener, action] = preflopSpot(h);
+  if (spot === "rfi" && h.pos && h.pos !== "BB") {
+    const key = "RFI " + h.pos;
+    if (spotExists(key)) {
+      const actualW = action === "raise" ? "raise" :
+                      action === "fold" ? "fold" : "call";
+      const disp = actualW === "call" ? "limp/call" : actualW;
+      const { ok, w } = judge(key, hc, "rfi", actualW);
+      out.push({ key, spot: "RFI", actual: disp,
+                 correct: weightsLabel(w, "rfi"), ok,
+                 cat: ok ? null : categorize("rfi", disp, w) });
+    }
+  } else if (spot === "vs_open" && opener) {
+    const op = h.posOf[opener] || "";
+    const key = `${h.pos} vs ${op} open`;
+    const actualW = { raise: "raise", call: "call", fold: "fold" }[action];
+    if (spotExists(key) && actualW) {
+      const disp = actualW === "raise" ? "3bet" : actualW;
+      const { ok, w } = judge(key, hc, "vs_open", actualW);
+      out.push({ key, spot: `vs ${op} open`, actual: disp,
+                 correct: weightsLabel(w, "vs_open"), ok,
+                 cat: ok ? null : categorize("vs_open", disp, w) });
+    }
+  }
+  const [tb, resp] = vs3betSpot(h);
+  if (tb) {
+    const tp = h.posOf[tb] || "";
+    const key = `${h.pos} open 被 ${tp} 3bet`;
+    const actualW = { raise: "raise", call: "call", fold: "fold" }[resp];
+    if (spotExists(key) && actualW) {
+      const disp = actualW === "raise" ? "4bet" : actualW;
+      const { ok, w } = judge(key, hc, "vs_3bet", actualW);
+      out.push({ key, spot: `open 被 ${tp} 3bet`, actual: disp,
+                 correct: weightsLabel(w, "vs_3bet"), ok,
+                 cat: ok ? null : categorize("vs_3bet", disp, w) });
+    }
+  }
+  return out;
+}
+
+// hands are stored raw-ish so ranges can be re-evaluated after edits
+function storedRecord(h) {
+  const hc = classify(h.cards[0], h.cards[1]);
+  const [spot, opener, action] = preflopSpot(h);
+  const [tb, resp] = vs3betSpot(h);
+  return { id: h.id, date: h.ts.slice(0, 10), bb: h.bb, pos: h.pos, hc,
+           net: Math.round(h.net * 100) / 100,
+           rk: h.collected > 0 ? Math.round(h.rake * 100) / 100 : 0,
+           pf: [spot, opener ? (h.posOf[opener] || "") : null, action],
+           tb: [tb ? (h.posOf[tb] || "") : null, resp] };
+}
+
+function decisionsOf(rec) {
+  // rebuild a minimal hand-like object for evalDecisions
+  const fake = {
+    pos: rec.pos, posOf: {},
+    actions: [],
+  };
+  // shortcut: evaluate directly from stored spot info
+  const out = [];
+  const [spot, openerPos, action] = rec.pf;
+  if (spot === "rfi" && rec.pos && rec.pos !== "BB") {
+    const key = "RFI " + rec.pos;
+    if (spotExists(key)) {
+      const actualW = action === "raise" ? "raise" :
+                      action === "fold" ? "fold" : "call";
+      const disp = actualW === "call" ? "limp/call" : actualW;
+      const { ok, w } = judge(key, rec.hc, "rfi", actualW);
+      out.push({ key, spot: "RFI", actual: disp,
+                 correct: weightsLabel(w, "rfi"), ok,
+                 cat: ok ? null : categorize("rfi", disp, w) });
+    }
+  } else if (spot === "vs_open" && openerPos) {
+    const key = `${rec.pos} vs ${openerPos} open`;
+    const actualW = { raise: "raise", call: "call", fold: "fold" }[action];
+    if (spotExists(key) && actualW) {
+      const disp = actualW === "raise" ? "3bet" : actualW;
+      const { ok, w } = judge(key, rec.hc, "vs_open", actualW);
+      out.push({ key, spot: `vs ${openerPos} open`, actual: disp,
+                 correct: weightsLabel(w, "vs_open"), ok,
+                 cat: ok ? null : categorize("vs_open", disp, w) });
+    }
+  }
+  const [tbPos, resp] = rec.tb;
+  if (tbPos) {
+    const key = `${rec.pos} open 被 ${tbPos} 3bet`;
+    const actualW = { raise: "raise", call: "call", fold: "fold" }[resp];
+    if (spotExists(key) && actualW) {
+      const disp = actualW === "raise" ? "4bet" : actualW;
+      const { ok, w } = judge(key, rec.hc, "vs_3bet", actualW);
+      out.push({ key, spot: `open 被 ${tbPos} 3bet`, actual: disp,
+                 correct: weightsLabel(w, "vs_3bet"), ok,
+                 cat: ok ? null : categorize("vs_3bet", disp, w) });
+    }
+  }
+  return out;
+}
+
+// ---------- import flow ----------
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("fileInput");
+const statusEl = document.getElementById("importStatus");
+
+async function importFiles(fileList) {
+  const store = loadStore();
+  let added = 0, dup = 0, total = 0;
+  for (const f of fileList) {
+    let texts = [];
+    try {
+      if (f.name.toLowerCase().endsWith(".zip"))
+        texts = (await readZip(await f.arrayBuffer())).map(x => x.text);
+      else texts = [await f.text()];
+    } catch (e) { statusEl.textContent = `讀取 ${f.name} 失敗:${e.message}`; continue; }
+    for (const text of texts) {
+      for (const h of parseText(text)) {
+        total++;
+        if (!h.cards || !h.pos) continue;
+        if (store.hands[h.id]) { dup++; continue; }
+        store.hands[h.id] = storedRecord(h);
+        added++;
+      }
+    }
+  }
+  saveStore(store);
+  statusEl.textContent = `完成:新增 ${added} 手,略過重複 ${dup} 手(檔案共 ${total} 手)`;
+  renderAll();
+}
+
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over");
+                     importFiles(e.dataTransfer.files); };
+fileInput.onchange = () => { importFiles(fileInput.files); fileInput.value = ""; };
+document.getElementById("clearBtn").onclick = () => {
+  if (confirm("確定要清空所有已上傳的手牌資料?此動作無法復原。")) {
+    localStorage.removeItem(STORE_KEY); renderAll();
+  }
+};
+
+// ---------- goal ----------
+const goalStake = document.getElementById("goalStake");
+const goalTarget = document.getElementById("goalTarget");
+document.getElementById("goalSave").onclick = () => {
+  localStorage.setItem(GOAL_KEY, JSON.stringify(
+    { bb: +goalStake.value, target: +goalTarget.value }));
+  renderAll();
+};
+
+// ---------- range editor ----------
+const spotSel = document.getElementById("spotSel");
+const showErr = document.getElementById("showErr");
+const editMode = document.getElementById("editMode");
+const brushSel = document.getElementById("brushSel");
+const mixInputs = document.getElementById("mixInputs");
+
+function refreshSpotOptions() {
+  const cust = loadCustom();
+  const cur = spotSel.value;
+  spotSel.innerHTML = ALL_SPOTS.map(k => {
+    let tag = "";
+    if (cust[k] && Object.keys(cust[k]).length) tag = "(自訂)";
+    else if (!DEFAULTS[k]) tag = "(未設定)";
+    return `<option value="${k}">${k} ${tag}</option>`;
+  }).join("");
+  spotSel.value = cur && ALL_SPOTS.includes(cur) ? cur : ALL_SPOTS[0];
+}
+
+function brushWeights() {
+  const b = brushSel.value;
+  if (b === "r") return { r: 100, c: 0, f: 0 };
+  if (b === "c") return { r: 0, c: 100, f: 0 };
+  if (b === "f") return { r: 0, c: 0, f: 100 };
+  if (b === "mix") {
+    let r = Math.max(0, Math.min(100, +document.getElementById("mixR").value || 0));
+    let c = Math.max(0, Math.min(100 - r, +document.getElementById("mixC").value || 0));
+    return { r, c, f: 100 - r - c };
+  }
+  return null; // reset
+}
+
+function paintCell(hand) {
+  const key = spotSel.value;
+  const cust = loadCustom();
+  const bw = brushWeights();
+  if (bw === null) {
+    if (cust[key]) { delete cust[key][hand];
+      if (!Object.keys(cust[key]).length) delete cust[key]; }
+  } else {
+    (cust[key] = cust[key] || {})[hand] = bw;
+  }
+  saveCustom(cust);
+  renderAll();
+}
+
+brushSel.onchange = () =>
+  mixInputs.classList.toggle("hidden", brushSel.value !== "mix");
+editMode.onchange = () => {
+  document.getElementById("editorBar").classList.toggle("hidden", !editMode.checked);
+  document.getElementById("rangeGrid").classList.toggle("editing", editMode.checked);
+  refreshSpotOptions();
+};
+document.getElementById("resetTable").onclick = () => {
+  const key = spotSel.value;
+  if (!confirm(`把「${key}」的自訂內容全部清除、回到預設?`)) return;
+  const cust = loadCustom(); delete cust[key]; saveCustom(cust); renderAll();
+};
+document.getElementById("exportRanges").onclick = () => {
+  const blob = new Blob([JSON.stringify(loadCustom(), null, 1)],
+                        { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "my_ranges.json"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+document.getElementById("importRangesBtn").onclick = () =>
+  document.getElementById("importRanges").click();
+document.getElementById("importRanges").onchange = async e => {
+  try {
+    const obj = JSON.parse(await e.target.files[0].text());
+    saveCustom(obj); renderAll();
+  } catch { alert("匯入失敗:不是有效的範圍 JSON"); }
+  e.target.value = "";
+};
+
+// ---------- hand notes ----------
+let editingNoteId = null;
+const noteEditor = document.getElementById("noteEditor");
+const noteLabel = (notes, id) => notes[id] ? "📝 筆記" : "＋筆記";
+
+function noteTitleOf(id) {
+  const rec = loadStore().hands[id];
+  if (!rec) return `Hand #${id}`;
+  const bb = Math.round(rec.net / rec.bb * 10) / 10;
+  return `${rec.date} · ${rec.hc} · ${rec.pos} · ` +
+         `${bb >= 0 ? "+" : ""}${bb}bb · #${id}`;
+}
+
+function openNoteEditor(id) {
+  const n = loadNotes()[id] || { text: "", tags: [] };
+  editingNoteId = id;
+  switchTab("journal");
+  noteEditor.classList.remove("hidden");
+  document.getElementById("noteTitle").textContent = noteTitleOf(id);
+  document.getElementById("noteText").value = n.text;
+  document.getElementById("noteTags").value = (n.tags || []).join(", ");
+  noteEditor.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById("noteText").focus();
+}
+
+document.getElementById("noteSave").onclick = () => {
+  if (!editingNoteId) return;
+  const text = document.getElementById("noteText").value.trim();
+  const tags = document.getElementById("noteTags").value
+    .split(/[,,]/).map(t => t.trim().replace(/^#/, "")).filter(Boolean);
+  const notes = loadNotes();
+  if (!text && !tags.length) delete notes[editingNoteId];
+  else notes[editingNoteId] = { text, tags,
+    updated: new Date().toISOString().slice(0, 10) };
+  saveNotes(notes);
+  noteEditor.classList.add("hidden"); editingNoteId = null;
+  renderAll();
+};
+document.getElementById("noteCancel").onclick = () => {
+  noteEditor.classList.add("hidden"); editingNoteId = null;
+};
+document.getElementById("noteDelete").onclick = () => {
+  if (!editingNoteId) return;
+  const notes = loadNotes(); delete notes[editingNoteId]; saveNotes(notes);
+  noteEditor.classList.add("hidden"); editingNoteId = null;
+  renderAll();
+};
+
+function wireNoteButtons(root) {
+  root.querySelectorAll("button[data-note]").forEach(b => {
+    b.onclick = () => openNoteEditor(b.dataset.note);
+  });
+}
+
+function renderNotes() {
+  const notes = loadNotes();
+  const store = loadStore();
+  const list = document.getElementById("notesList");
+  const ids = Object.keys(notes).sort((a, b) => {
+    const da = store.hands[a]?.date || "", db = store.hands[b]?.date || "";
+    return da < db ? 1 : da > db ? -1 : (a < b ? 1 : -1);
+  });
+  if (!ids.length) {
+    list.innerHTML = `<p class="note">在熱力圖詳情或偏差清單點「＋筆記」,幫任何一手牌寫下檢討。</p>`;
+    return;
+  }
+  list.innerHTML = ids.map(id => {
+    const n = notes[id];
+    const tags = (n.tags || []).map(t => `<span class="tag">#${esc(t)}</span>`).join("");
+    return `<div class="entry"><b>${esc(noteTitleOf(id))}</b>
+      <span class="note" style="float:right;">${esc(n.updated || "")}</span>
+      <div style="margin-top:4px;">${tags}</div>
+      <div class="body">${esc(n.text)}</div>
+      <div class="controls" style="margin:10px 0 0;">
+        <button class="mini ghost" data-note="${esc(id)}">編輯</button>
+      </div></div>`;
+  }).join("");
+  wireNoteButtons(list);
+}
+
+// ---------- session diary ----------
+const diaryDate = document.getElementById("diaryDate");
+
+function diaryStatsOf(date, rows) {
+  const s = rows.find(r => r.date === date);
+  return s ? `${s.hands} 手 · ${s.net_bb >= 0 ? "+" : ""}${s.net_bb} bb · ` +
+             `bb/100 ${s.bb100 >= 0 ? "+" : ""}${s.bb100} · 偏差率 ${s.rate}%`
+           : "(此日期無手牌資料)";
+}
+
+function loadDiaryEntry() {
+  const rows = (window._D || computeData()).rows;
+  const d = diaryDate.value;
+  document.getElementById("diaryStats").textContent = d ? diaryStatsOf(d, rows) : "";
+  document.getElementById("diaryText").value = d ? (loadDiary()[d]?.text || "") : "";
+  document.getElementById("diaryMsg").textContent = "";
+}
+diaryDate.onchange = loadDiaryEntry;
+
+document.getElementById("diarySave").onclick = () => {
+  const d = diaryDate.value;
+  if (!d) return;
+  const text = document.getElementById("diaryText").value.trim();
+  const diary = loadDiary();
+  if (!text) delete diary[d];
+  else diary[d] = { text, updated: new Date().toISOString().slice(0, 10) };
+  saveDiary(diary);
+  document.getElementById("diaryMsg").textContent = "已儲存 ✓";
+  renderJournal(window._D || computeData());
+};
+
+function renderJournal(D) {
+  const diary = loadDiary();
+  const dates = [...new Set(D.rows.map(r => r.date).concat(Object.keys(diary)))]
+    .sort().reverse();
+  const cur = diaryDate.value;
+  diaryDate.innerHTML = dates.map(d =>
+    `<option value="${d}">${d}${diary[d] ? " 📝" : ""}</option>`).join("");
+  if (cur && dates.includes(cur)) diaryDate.value = cur;
+  loadDiaryEntry();
+
+  const list = document.getElementById("diaryList");
+  const entries = Object.keys(diary).sort().reverse();
+  list.innerHTML = entries.map(d =>
+    `<div class="entry"><b>${esc(d)}</b>
+      <span class="note" style="margin-left:10px;">${esc(diaryStatsOf(d, D.rows))}</span>
+      <div class="body">${esc(diary[d].text)}</div></div>`).join("")
+    || `<p class="note">還沒有日記。打完一個 session,回來寫下當天的狀態與檢討,系統會把數據和心得放在一起。</p>`;
+}
+
+// ---------- full backup ----------
+document.getElementById("backupBtn").onclick = () => {
+  const data = { app: "poker_growth", version: 1,
+    exported: new Date().toISOString(),
+    hands: loadStore().hands, goal: loadGoal(), ranges: loadCustom(),
+    notes: loadNotes(), diary: loadDiary() };
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `poker_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("restoreBtn").onclick = () =>
+  document.getElementById("restoreFile").click();
+document.getElementById("restoreFile").onchange = async e => {
+  try {
+    const data = JSON.parse(await e.target.files[0].text());
+    if (!data || data.app !== "poker_growth" || typeof data.hands !== "object")
+      throw new Error("格式不符");
+    if (!confirm(`匯入 ${data.exported ? data.exported.slice(0, 10) : "未知日期"} 的備份?` +
+        `\n手牌會合併去重;筆記/日記/範圍若同一筆以備份內容為準。`)) {
+      e.target.value = ""; return;
+    }
+    const store = loadStore();
+    let added = 0;
+    for (const [id, rec] of Object.entries(data.hands || {}))
+      if (!store.hands[id]) { store.hands[id] = rec; added++; }
+    saveStore(store);
+    saveNotes({ ...loadNotes(), ...(data.notes || {}) });
+    saveDiary({ ...loadDiary(), ...(data.diary || {}) });
+    saveCustom({ ...loadCustom(), ...(data.ranges || {}) });
+    if (data.goal) localStorage.setItem(GOAL_KEY, JSON.stringify(data.goal));
+    alert(`匯入完成:新增 ${added} 手,筆記 ${Object.keys(data.notes || {}).length} 則、` +
+          `日記 ${Object.keys(data.diary || {}).length} 篇已合併。`);
+    renderAll();
+  } catch (err) { alert("匯入失敗:" + err.message); }
+  e.target.value = "";
+};
+
+// ---------- rendering ----------
+const fmt = n => (n > 0 ? "+" : "") + n;
+const cls = n => n >= 0 ? "pos" : "neg";
+const CAT_COLOR_BASE = {
+  "RFI 太緊(該 open 沒 open)": "#ffd84d", "太緊(該防守沒防守)": "#ffd84d",
+  "call 過鬆": "#ff9d3b", "RFI 太鬆(open 過寬)": "#ff6b6b",
+  "RFI 用 limp": "#a0e070", "應對錯": "#ffffff",
+};
+function catColor(c) {
+  if (CAT_COLOR_BASE[c]) return CAT_COLOR_BASE[c];
+  if (/^該 .*卻 call$/.test(c)) return "#b78bff";
+  if (/選牌錯$/.test(c)) return "#ff7bd5";
+  if (/^該 call 卻/.test(c)) return "#6bd6ff";
+  return "#ffffff";
+}
+const C_RAISE = "#c0392b", C_CALL = "#2e8b57", C_FOLD = "#31537d";
+const dateFilter = document.getElementById("dateFilter");
+
+function computeData() {
+  const store = loadStore();
+  const hands = Object.values(store.hands);
+  const sessions = {}, mistakes = [], cats = {}, grid = {};
+  for (const h of hands) {
+    const s = sessions[h.date] = sessions[h.date] ||
+      { date: h.date, hands: 0, net_bb: 0, decisions: 0, mist: 0 };
+    s.hands++; s.net_bb += h.net / h.bb;
+    for (const d of decisionsOf(h)) {
+      s.decisions++;
+      (grid[h.hc] = grid[h.hc] || [0, 0])[0]++;
+      if (!d.ok) {
+        s.mist++; grid[h.hc][1]++;
+        cats[d.cat] = (cats[d.cat] || 0) + 1;
+        mistakes.push({ date: h.date, hand: h.hc, pos: h.pos, spot: d.spot,
+          key: d.key, actual: d.actual, correct: d.correct, cat: d.cat,
+          net_bb: Math.round(h.net / h.bb * 10) / 10, id: h.id });
+      }
+    }
+  }
+  const rows = Object.values(sessions).sort((a, b) => a.date < b.date ? -1 : 1);
+  rows.forEach(s => {
+    s.net_bb = Math.round(s.net_bb * 10) / 10;
+    s.bb100 = s.hands ? Math.round(1000 * s.net_bb / s.hands) / 10 : 0;
+    s.rate = s.decisions ? Math.round(1000 * s.mist / s.decisions) / 10 : 0;
+  });
+  return { hands, rows, mistakes, cats, grid };
+}
+
+function renderAll() {
+  const D = window._D = computeData();
+  document.getElementById("storeInfo").textContent = `目前已儲存 ${D.hands.length} 手`;
+
+  const g = loadGoal();
+  goalStake.value = String(g.bb); goalTarget.value = g.target;
+  const cur = D.hands.filter(h => Math.abs(h.bb - g.bb) < 1e-9)
+                     .reduce((a, h) => a + h.net, 0);
+  const curR = Math.round(cur * 100) / 100;
+  const pct = Math.min(100, 100 * curR / g.target);
+  const bar = document.getElementById("goalBar");
+  bar.style.width = Math.min(100, Math.abs(pct)) + "%";
+  bar.style.background = curR < 0 ? "var(--loss)" : "var(--win)";
+  document.getElementById("goalText").innerHTML =
+    `<b class="${cls(curR)}">$${curR.toFixed(2)}</b> / $${g.target}` +
+    `(${pct.toFixed(1)}%)　還差 $${Math.max(0, g.target - curR).toFixed(2)}`;
+
+  const totH = D.hands.length;
+  const totNet = D.rows.reduce((a, s) => a + s.net_bb, 0);
+  const totD = D.rows.reduce((a, s) => a + s.decisions, 0);
+  const totM = D.rows.reduce((a, s) => a + s.mist, 0);
+  const totRake = D.hands.reduce((a, h) => a + (h.rk || 0), 0);
+  const rakeBB = D.hands.reduce((a, h) => a + (h.rk || 0) / h.bb, 0);
+  const preNet = totNet + rakeBB;
+  document.getElementById("summary").innerHTML = totH ? [
+    ["總手數", totH],
+    ["總盈虧 (bb)", `<span class="${cls(totNet)}">${fmt(Math.round(totNet))}</span>`],
+    ["bb/100(稅後)", `<span class="${cls(totNet)}">${fmt((100 * totNet / totH).toFixed(1))}</span>`],
+    ["bb/100(稅前)", `<span class="${cls(preNet)}">${fmt((100 * preNet / totH).toFixed(1))}</span>`],
+    ["翻前偏差率", totD ? (100 * totM / totD).toFixed(1) + "%" : "-"],
+    ["偏差 / 判定", `${totM} / ${totD}`],
+    ["已付抽水 $", totRake.toFixed(2)],
+  ].map(([k, v]) => `<div class="card"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("")
+  : `<div class="card"><div class="v">尚無資料</div><div class="k">先上傳手牌開始追蹤</div></div>`;
+
+  renderWinnings(D);
+
+  const svg = document.getElementById("chart");
+  const W = 820, H = 260, P = 44, ss = D.rows;
+  if (!ss.length) svg.innerHTML = "";
+  else {
+    const maxR = Math.max(15, ...ss.map(s => s.rate)) * 1.15;
+    const x = i => ss.length === 1 ? W / 2 : P + i * (W - 2 * P) / (ss.length - 1);
+    const y = r => H - P - r / maxR * (H - 2 * P);
+    let el = "";
+    for (let gg = 0; gg <= 4; gg++) {
+      const r = maxR * gg / 4, yy = y(r);
+      el += `<line x1="${P}" x2="${W - P}" y1="${yy}" y2="${yy}" stroke="var(--line)"/>` +
+            `<text x="${P - 8}" y="${yy + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${r.toFixed(0)}%</text>`;
+    }
+    el += `<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="` +
+          ss.map((s, i) => `${x(i)},${y(s.rate)}`).join(" ") + `"/>`;
+    ss.forEach((s, i) => {
+      el += `<circle cx="${x(i)}" cy="${y(s.rate)}" r="4" fill="var(--accent)"/>` +
+            `<text x="${x(i)}" y="${y(s.rate) - 10}" fill="var(--ink)" font-size="11" text-anchor="middle">${s.rate}%</text>` +
+            `<text x="${x(i)}" y="${H - P + 18}" fill="var(--muted)" font-size="11" text-anchor="middle">${s.date.slice(5)}</text>`;
+    });
+    svg.innerHTML = el;
+  }
+
+  document.querySelector("#sessions tbody").innerHTML = ss.map(s =>
+    `<tr><td>${s.date}</td><td>${s.hands}</td><td class="${cls(s.net_bb)}">${fmt(s.net_bb)}</td>` +
+    `<td class="${cls(s.bb100)}">${fmt(s.bb100)}</td><td>${s.decisions}</td>` +
+    `<td>${s.mist}</td><td><b>${s.rate}%</b></td></tr>`).join("");
+
+  document.querySelector("#cats tbody").innerHTML =
+    Object.entries(D.cats).sort((a, b) => b[1] - a[1])
+      .map(([c, n]) => `<tr><td>${c}</td><td>${n}</td></tr>`).join("");
+
+  let cells = "";
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+    const name = i === j ? RANKS[i] + RANKS[j] :
+      (i < j ? RANKS[i] + RANKS[j] + "s" : RANKS[j] + RANKS[i] + "o");
+    const gg = D.grid[name];
+    let style = "", label = name, clickable = "";
+    if (gg) {
+      if (gg[1] > 0) {
+        const a = Math.min(0.9, 0.25 + gg[1] / gg[0] * 0.65);
+        style = `background:rgba(220,70,70,${a}); color:#fff;`;
+        label = `${name}<br>${gg[1]}/${gg[0]}`;
+        clickable = " clickable";
+      } else style = "background:var(--accent-soft); color:var(--accent);";
+    }
+    cells += `<div class="cell${clickable}" data-hand="${name}"
+      style="${style}"><div style="text-align:center">${label}</div></div>`;
+  }
+  const gridEl2 = document.getElementById("grid");
+  gridEl2.innerHTML = cells;
+  gridEl2.querySelectorAll(".cell.clickable").forEach(el => {
+    el.onclick = () => showHandDetail(el.dataset.hand);
+  });
+
+  refreshSpotOptions();
+  renderRange(); renderMistakes(true);
+  renderJournal(D); renderNotes();
+}
+
+const winStake = document.getElementById("winStake");
+winStake.onchange = () => renderWinnings(window._D || computeData());
+
+function renderWinnings(D) {
+  // stake filter options
+  const stakes = [...new Set(D.hands.map(h => h.bb))].sort((a, b) => a - b);
+  const cur = winStake.value;
+  winStake.innerHTML = `<option value="">全部級別(bb)</option>` +
+    stakes.map(b => `<option value="${b}">NL${Math.round(b * 100)}</option>`).join("");
+  winStake.value = cur && stakes.includes(+cur) ? cur : "";
+
+  const sel = winStake.value ? +winStake.value : null;
+  const hands = D.hands
+    .filter(h => sel === null || Math.abs(h.bb - sel) < 1e-9)
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 :
+                    (a.id < b.id ? -1 : 1));
+  const svg = document.getElementById("winChart");
+  if (!hands.length) { svg.innerHTML = "";
+    document.getElementById("winInfo").textContent = ""; return; }
+
+  let acc = 0;
+  const pts = hands.map(h => (acc += h.net / h.bb));
+  const n = pts.length;
+  const bb100 = 100 * acc / n;
+  document.getElementById("winInfo").textContent =
+    `${n} 手 · ${acc >= 0 ? "+" : ""}${acc.toFixed(0)} bb · bb/100:` +
+    `${bb100 >= 0 ? "+" : ""}${bb100.toFixed(1)}`;
+
+  const W = 820, H = 260, P = 44;
+  const lo = Math.min(0, ...pts), hi = Math.max(0, ...pts);
+  const span = (hi - lo) || 1;
+  const x = i => P + i * (W - 2 * P) / Math.max(1, n - 1);
+  const y = v => H - P - (v - lo) / span * (H - 2 * P);
+  // downsample for smooth rendering
+  const step = Math.max(1, Math.floor(n / 400));
+  const poly = [];
+  for (let i = 0; i < n; i += step) poly.push(`${x(i).toFixed(1)},${y(pts[i]).toFixed(1)}`);
+  if ((n - 1) % step !== 0) poly.push(`${x(n - 1).toFixed(1)},${y(pts[n - 1]).toFixed(1)}`);
+
+  let el = "";
+  // gridlines
+  for (let g = 0; g <= 4; g++) {
+    const v = lo + span * g / 4, yy = y(v);
+    el += `<line x1="${P}" x2="${W - P}" y1="${yy}" y2="${yy}" stroke="var(--line)"/>` +
+          `<text x="${P - 8}" y="${yy + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${v.toFixed(0)}</text>`;
+  }
+  // zero line emphasized
+  if (lo < 0 && hi > 0)
+    el += `<line x1="${P}" x2="${W - P}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-dasharray="4 3"/>`;
+  // area fill + line
+  const areaColor = acc >= 0 ? "var(--win)" : "var(--loss)";
+  el += `<polyline fill="none" stroke="${areaColor}" stroke-width="2" points="${poly.join(" ")}"/>`;
+  // endpoint
+  el += `<circle cx="${x(n - 1)}" cy="${y(pts[n - 1])}" r="4" fill="${areaColor}"/>` +
+        `<text x="${x(n - 1) - 6}" y="${y(pts[n - 1]) - 10}" fill="var(--ink)" font-size="11" text-anchor="end">${acc >= 0 ? "+" : ""}${acc.toFixed(0)} bb</text>`;
+  // x labels: hand counts
+  for (let g = 0; g <= 4; g++) {
+    const i = Math.round((n - 1) * g / 4);
+    el += `<text x="${x(i)}" y="${H - P + 18}" fill="var(--muted)" font-size="11" text-anchor="middle">${i + 1}</text>`;
+  }
+  svg.innerHTML = el;
+}
+
+function renderRange() {
+  const D = window._D || computeData();
+  const key = spotSel.value;
+  const cust = loadCustom()[key] || {};
+  const errs = {};
+  if (showErr.checked)
+    D.mistakes.filter(m => m.key === key).forEach(m =>
+      (errs[m.hand] = errs[m.hand] || []).push(m));
+  let html = "";
+  for (const name of CLASSES) {
+    const w = cellWeights(key, name);
+    const stops = [];
+    let acc = 0;
+    if (w.r > 0) { stops.push(`${C_RAISE} ${acc}% ${acc + w.r}%`); acc += w.r; }
+    if (w.c > 0) { stops.push(`${C_CALL} ${acc}% ${acc + w.c}%`); acc += w.c; }
+    if (w.f > 0) { stops.push(`${C_FOLD} ${acc}% 100%`); }
+    const bg = stops.length > 1 ?
+      `linear-gradient(to right, ${stops.join(", ")})` :
+      (w.r === 100 ? C_RAISE : w.c === 100 ? C_CALL : C_FOLD);
+    let inner = name, extra = "",
+        title = `${name}:raise ${w.r} / call ${w.c} / fold ${w.f}`;
+    if (cust[name]) inner += `<span class="custommark">●</span>`;
+    const e = errs[name];
+    if (e) {
+      const c = catColor(e[0].cat);
+      extra = `outline:2px solid ${c}; outline-offset:-2px;`;
+      inner = name + `<span class="badge" style="background:${c}">${e.length}</span>` +
+              (cust[name] ? `<span class="custommark">●</span>` : "");
+      title += "\n" + e.map(m =>
+        `${m.date} ${m.spot}:你 ${m.actual},基準 ${m.correct} (${m.net_bb}bb)`).join("\n");
+    }
+    html += `<div class="cell" data-hand="${name}" title="${title}"
+      style="background:${bg}; ${extra}">${inner}</div>`;
+  }
+  const gridEl = document.getElementById("rangeGrid");
+  gridEl.innerHTML = html;
+  gridEl.querySelectorAll(".cell").forEach(el => {
+    el.onmousedown = e => { if (editMode.checked) { e.preventDefault();
+      paintCell(el.dataset.hand); } };
+    el.onmouseenter = e => { if (editMode.checked && e.buttons & 1)
+      paintCell(el.dataset.hand); };
+  });
+  document.getElementById("customInfo").textContent =
+    `此表自訂了 ${Object.keys(cust).length} 格` +
+    (DEFAULTS[key] ? "" : "(此情境無預設,從全 fold 開始)");
+  const catsHere = [...new Set(D.mistakes.filter(m => m.key === key).map(m => m.cat))];
+  document.getElementById("legend").innerHTML =
+    `<span class="lg"><span style="background:${C_RAISE}"></span>raise/3bet/4bet</span>` +
+    `<span class="lg"><span style="background:${C_CALL}"></span>call/limp</span>` +
+    `<span class="lg"><span style="background:${C_FOLD}"></span>fold</span>` +
+    `<span class="lg">● = 自訂格</span>` +
+    (showErr.checked ? catsHere.map(c =>
+      `<span class="lg"><span style="background:${catColor(c)}"></span>${c}</span>`).join("") : "");
+}
+
+function showHandDetail(hand) {
+  const D = window._D || computeData();
+  const list = D.mistakes.filter(m => m.hand === hand);
+  const panel = document.getElementById("handDetail");
+  if (!list.length) { panel.classList.add("hidden"); return; }
+  const total = (D.grid[hand] || [0, 0]);
+  panel.classList.remove("hidden");
+  panel.innerHTML =
+    `<button class="close" title="關閉" aria-label="關閉">✕</button>` +
+    `<b>${hand}</b> — 判定 ${total[0]} 次,打錯 ${total[1]} 次` +
+    `<div class="tablewrap" style="border:none; padding:0;"><table><thead><tr>
+      <th>日期</th><th>位置</th><th>情境</th><th>你的動作</th><th>基準</th>
+      <th>類型</th><th>結果(bb)</th><th></th></tr></thead><tbody>` +
+    list.map((m, i) =>
+      `<tr><td>${m.date}</td><td>${m.pos}</td><td>${m.spot}</td>` +
+      `<td>${m.actual}</td><td>${m.correct}</td><td>${m.cat}</td>` +
+      `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td>` +
+      `<td><button class="mini" data-key="${m.key}" data-hand="${hand}">查看範圍表</button> ` +
+      `<button class="mini ghost" data-note="${m.id}">${noteLabel(loadNotes(), m.id)}</button></td></tr>`
+    ).join("") + `</tbody></table></div>`;
+  panel.querySelector(".close").onclick = () => panel.classList.add("hidden");
+  panel.querySelectorAll("button.mini[data-key]").forEach(b => {
+    b.onclick = () => jumpToRange(b.dataset.key, b.dataset.hand);
+  });
+  wireNoteButtons(panel);
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function jumpToRange(key, hand) {
+  if (![...spotSel.options].some(o => o.value === key)) return;
+  spotSel.value = key;
+  renderRange();
+  const target = document.querySelector(`#rangeGrid .cell[data-hand="${hand}"]`);
+  document.getElementById("rangeGrid").scrollIntoView(
+    { behavior: "smooth", block: "center" });
+  if (target) {
+    target.classList.remove("hl"); void target.offsetWidth;
+    target.classList.add("hl");
+  }
+}
+
+function renderMistakes(rebuildFilter) {
+  const D = window._D || computeData();
+  if (rebuildFilter) {
+    const cur = dateFilter.value;
+    dateFilter.innerHTML = `<option value="">全部期別</option>` +
+      [...new Set(D.mistakes.map(m => m.date))].map(d =>
+        `<option value="${d}">${d}</option>`).join("");
+    dateFilter.value = cur || "";
+  }
+  const f = dateFilter.value;
+  const notes = loadNotes();
+  const tbody = document.querySelector("#mistakes tbody");
+  tbody.innerHTML = D.mistakes
+    .filter(m => !f || m.date === f)
+    .map(m => `<tr><td>${m.date}</td><td>${m.hand}</td><td>${m.pos}</td><td>${m.spot}</td>` +
+      `<td>${m.actual}</td><td>${m.correct}</td><td>${m.cat}</td>` +
+      `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td><td>${m.id}</td>` +
+      `<td><button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`).join("");
+  wireNoteButtons(tbody);
+}
+
+spotSel.onchange = renderRange;
+showErr.onchange = renderRange;
+dateFilter.onchange = () => renderMistakes(false);
+
+// ---------- tabs ----------
+const UI_KEY = "poker_ui_v1";
+function switchTab(name) {
+  document.querySelectorAll("#tabs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll("[data-pane]").forEach(el =>
+    el.classList.toggle("pane-active", el.dataset.pane === name));
+  localStorage.setItem(UI_KEY, JSON.stringify({ tab: name }));
+}
+document.querySelectorAll("#tabs button").forEach(b => {
+  b.onclick = () => { switchTab(b.dataset.tab); window.scrollTo({ top: 0 }); };
+});
+
+renderAll();
+const savedTab = loadJSON(UI_KEY, {}).tab;
+const validTabs = ["overview", "review", "journal", "data"];
+switchTab(validTabs.includes(savedTab) ? savedTab :
+  (Object.keys(loadStore().hands).length ? "overview" : "data"));
+</script>
+</body>
+</html>
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-o", "--output", default="index.html")
+    args = ap.parse_args()
+    tables = weighted_defaults()
+    html = TEMPLATE.replace("/*TABLES*/", json.dumps(tables, ensure_ascii=False))
+    Path(args.output).write_text(html, encoding="utf-8")
+    print(f"app written to {args.output} ({len(tables)} default tables embedded)")
+
+
+if __name__ == "__main__":
+    main()
