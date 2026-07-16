@@ -1,0 +1,168 @@
+<div class="wrap">
+<header class="top">
+  <h1>撲克成長紀錄</h1>
+  <span class="sub">Natural8 / GG 手牌 · 6max 100bb · 資料只存在你的瀏覽器</span>
+</header>
+
+<nav class="tabs" id="tabs" aria-label="主導覽">
+  <button data-tab="overview">📊 總覽</button>
+  <button data-tab="review">🔍 檢討</button>
+  <button data-tab="journal">📓 日誌</button>
+  <button data-tab="data">📂 資料</button>
+</nav>
+
+<section data-pane="data">
+<h2>Import<span class="zh">上傳手牌</span></h2>
+<div class="panel">
+  <div id="drop"><b>把 Natural8 匯出的 .zip 或 .txt 拖到這裡</b><br>
+    或點擊選擇檔案(可多選;重複的手牌會自動去重)</div>
+  <input type="file" id="fileInput" class="hidden" multiple accept=".zip,.txt">
+  <div id="importStatus" class="note" style="margin-top:10px;"></div>
+  <div class="controls" style="margin-top:12px; margin-bottom:0;">
+    <span class="note" id="storeInfo"></span>
+    <button class="ghost" id="backupBtn">匯出完整備份</button>
+    <button class="ghost" id="restoreBtn">匯入備份</button>
+    <input type="file" id="restoreFile" class="hidden" accept=".json">
+    <button class="danger" id="clearBtn">清空所有手牌資料</button>
+  </div>
+  <div class="note" style="margin-top:6px;">備份包含:手牌、手牌筆記、Session 日記、目標、自訂範圍。換裝置或清瀏覽器資料前請先匯出。</div>
+</div>
+</section>
+
+<section data-pane="overview">
+<h2>Goal<span class="zh">升級目標</span></h2>
+<div class="panel">
+  <div class="controls">
+    <label>級別
+      <select id="goalStake">
+        <option value="0.05">NL5</option><option value="0.1" selected>NL10</option>
+        <option value="0.25">NL25</option><option value="0.5">NL50</option>
+      </select></label>
+    <label>目標金額 $ <input type="number" id="goalTarget" value="500" min="1"></label>
+    <button id="goalSave">儲存</button>
+  </div>
+  <div style="background:var(--track); border-radius:8px; height:24px; overflow:hidden;">
+    <div id="goalBar" style="height:100%; border-radius:8px; background:var(--win);
+         width:0%; transition:width .6s;"></div>
+  </div>
+  <div id="goalText" style="margin-top:10px; font-size:14px;
+       font-variant-numeric:tabular-nums;"></div>
+  <div class="note" style="margin-top:4px;">金額為扣除抽水後實拿;未含返水。只統計已上傳的手牌。</div>
+</div>
+</section>
+
+<div class="cards" id="summary" data-pane="overview"></div>
+
+<section data-pane="overview"><h2>HUD<span class="zh">整體數據(對照常見合理區間)</span></h2>
+<div id="hudViz"></div>
+<details style="margin-top:12px;">
+<summary class="note" style="cursor:pointer;">展開明細表格</summary>
+<div class="tablewrap" style="margin-top:8px;"><table id="hud"><thead><tr>
+<th>指標</th><th>說明</th><th>數值</th><th>樣本</th><th>參考區間</th></tr></thead><tbody></tbody></table></div>
+</details>
+<p class="note" id="hudNote"></p></section>
+
+<div class="grid2" data-pane="overview">
+<section><h2>Winnings<span class="zh">累積盈虧曲線</span></h2>
+<div class="controls">
+  <label><select id="winStake"><option value="">全部級別(bb)</option></select></label>
+  <span class="note" id="winInfo"></span>
+</div>
+<svg id="winChart" viewBox="0 0 820 260"
+     style="background:var(--surface); border:1px solid var(--line); border-radius:12px;"></svg></section>
+
+<section><h2>Trend<span class="zh">翻前偏差率趨勢(目標:逐期下降)</span></h2>
+<svg id="chart" viewBox="0 0 820 260"></svg></section>
+</div>
+
+<section data-pane="overview"><h2>Sessions<span class="zh">分期明細</span></h2>
+<div class="tablewrap"><table id="sessions"><thead><tr>
+<th>日期</th><th>手數</th><th>盈虧(bb)</th><th>bb/100</th>
+<th>判定決策</th><th>偏差</th><th>偏差率</th></tr></thead><tbody></tbody></table></div></section>
+
+<section data-pane="journal"><h2>Journal<span class="zh">Session 日記</span></h2>
+<div class="panel">
+  <div class="controls">
+    <label>日期 <select id="diaryDate"></select></label>
+    <span class="note" id="diaryStats"></span>
+  </div>
+  <textarea id="diaryText" rows="4"
+    placeholder="今天狀態如何?哪裡打得好、哪裡 tilt 了、下次要注意什麼…"></textarea>
+  <div class="controls" style="margin:10px 0 0;">
+    <button id="diarySave">儲存日記</button>
+    <span class="note" id="diaryMsg"></span>
+  </div>
+</div>
+<div id="diaryList"></div></section>
+
+<section data-pane="review"><h2>Leak types<span class="zh">偏差類型</span></h2>
+<div class="tablewrap" style="max-width:460px;">
+<table id="cats"><thead><tr><th>類型</th><th>次數</th></tr></thead><tbody></tbody></table>
+</div></section>
+
+<section data-pane="review"><h2>Ranges<span class="zh">範圍表(可自訂)</span></h2>
+<div class="controls">
+  <select id="spotSel"></select>
+  <label><input type="checkbox" id="showErr" checked> 疊上我的錯誤</label>
+  <label><input type="checkbox" id="editMode"> 編輯模式</label>
+</div>
+<div id="editorBar" class="hidden">
+  <div class="controls" style="margin-bottom:6px;">
+    <label>筆刷
+      <select id="brushSel">
+        <option value="r">raise 100%</option>
+        <option value="c">call/limp 100%</option>
+        <option value="f">fold 100%</option>
+        <option value="mix">自訂混合</option>
+        <option value="reset">恢復此格預設</option>
+      </select></label>
+    <span id="mixInputs" class="hidden">
+      <label>raise% <input type="number" id="mixR" value="50" min="0" max="100"></label>
+      <label>call% <input type="number" id="mixC" value="50" min="0" max="100"></label>
+      <span class="note">fold% 自動 = 剩餘</span>
+    </span>
+  </div>
+  <div class="controls" style="margin-bottom:0;">
+    <span class="note" id="customInfo"></span>
+    <button class="ghost" id="resetTable">重設此表為預設</button>
+    <button class="ghost" id="exportRanges">匯出自訂範圍</button>
+    <button class="ghost" id="importRangesBtn">匯入</button>
+    <input type="file" id="importRanges" class="hidden" accept=".json">
+  </div>
+  <div class="note" style="margin-top:6px;">在格子上點擊或按住拖曳塗刷。判定規則:你的動作在該格權重 ≥20% 即算正確。</div>
+</div>
+<div id="legend" class="note" style="margin-bottom:8px;"></div>
+<div class="gridwrap big" id="rangeGrid"></div></section>
+
+<section data-pane="review"><h2>Heatmap<span class="zh">13×13 起手牌:紅=常打錯(點紅格看詳情)</span></h2>
+<div class="gridwrap" id="grid"></div>
+<div id="handDetail" class="panel hidden" style="margin-top:12px;"></div></section>
+
+<section data-pane="review"><h2>Mistakes<span class="zh">偏差清單</span></h2>
+<details id="mistDetails">
+<summary style="cursor:pointer; color:var(--muted); font-size:13px;
+  padding:10px 0;">展開完整清單(平常用熱力圖點格子看就好)</summary>
+<div class="controls" style="margin-top:8px;"><select id="dateFilter"><option value="">全部期別</option></select></div>
+<div class="tablewrap"><table id="mistakes"><thead><tr>
+<th>日期</th><th>手牌</th><th>位置</th><th>情境</th><th>你的動作</th>
+<th>基準</th><th>類型</th><th>結果(bb)</th><th>Hand ID</th><th>筆記</th></tr></thead><tbody></tbody></table></div>
+<p class="note">預設基準:GTO Wizard 6max NL25 100bb 簡化版;你可在範圍表區自訂覆蓋。</p>
+</details></section>
+
+<section data-pane="journal"><h2>Notes<span class="zh">手牌筆記</span></h2>
+<div id="noteEditor" class="panel hidden" style="margin-bottom:12px;">
+  <div id="noteTitle" style="font-weight:600;"></div>
+  <textarea id="noteText" rows="4" style="margin-top:8px;"
+    placeholder="這手的檢討:當時的想法、錯在哪、正確思路是什麼…"></textarea>
+  <div class="controls" style="margin:10px 0 0;">
+    <label>標籤 <input type="text" id="noteTags" style="width:220px;"
+      placeholder="過度跟注, 情緒手(逗號分隔)"></label>
+    <button id="noteSave">儲存筆記</button>
+    <button class="ghost" id="noteCancel">關閉</button>
+    <button class="danger" id="noteDelete">刪除此筆記</button>
+  </div>
+</div>
+<div id="notesList"><p class="note">在熱力圖詳情或偏差清單點「＋筆記」,幫任何一手牌寫下檢討。</p></div>
+</section>
+</div>
+

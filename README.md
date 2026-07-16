@@ -38,9 +38,15 @@ python src/analyze.py hands -o report.md
 
 ## 檔案結構
 
-- `src/hand_parser.py` — GG 手牌紀錄解析器
+- `src/hand_parser.py` — GG 手牌紀錄解析器(Python 報告管線用)
 - `src/ranges.py` — 翻前範圍資料庫
 - `src/analyze.py` — 統計 + 比對 + 報告輸出
+- `src/build_app.py` — 網頁 app 組裝器(產生 index.html)
+- `src/app/` — 網頁 app 原始碼,按功能拆分:
+  - `template.html` / `body.html` / `styles.css` — 骨架、版面、樣式
+  - `js/` — 14 個功能模組(parser、stats、render、notes、diary、backup…),
+    依 `build_app.py` 的 `JS_ORDER` 串接;改任何模組後跑
+    `python src/build_app.py` 重建
 
 ## 已知限制
 

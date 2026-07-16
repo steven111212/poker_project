@@ -125,6 +125,9 @@
   .grid2.pane-active { display:grid; grid-template-columns:1fr 1fr; }
   @media (max-width:900px) { .grid2.pane-active { grid-template-columns:1fr; } }
   .grid2 svg { width:100%; height:auto; }
+  /* charts bottom-align even when one column has an extra controls row */
+  .grid2 section { display:flex; flex-direction:column; }
+  .grid2 section svg { margin-top:auto; }
   .hudrow { display:flex; gap:10px 30px; flex-wrap:wrap; margin-bottom:16px; }
   .donut { text-align:center; }
   .donut .k { font-size:12.5px; color:var(--muted); margin-top:2px; }
