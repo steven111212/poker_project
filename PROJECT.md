@@ -25,8 +25,9 @@ dashboard.html 已移除,功能全部併入 index.html。
 |---|---|---|
 | RFI(UTG/HJ/CO/BTN/SB) | 5 | ✅ 已校正 |
 | vs open(各位置組合) | 15 | ✅ 已校正 |
-| SB open 被 BB 3-bet | 1 | ✅ 已校正 |
-| 其他 vs 3-bet / 4-bet / squeeze | - | ⬜ 未來擴充 |
+| vs 3-bet(UTG 被 HJ/CO、SB 被 BB) | 3 | ✅ 已校正 |
+| vs 3-bet(其餘 12 張) | 12 | ⚠ 標準簡化版,未經截圖校正,建議抽查 |
+| vs 4-bet / squeeze | - | ⬜ 未來擴充 |
 
 原則:**純策略、不帶混合頻率**(≥50% 的動作為準)。
 混頻邊界牌(如 88 call UTG open)被標記時自行斟酌。
