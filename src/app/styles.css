@@ -137,4 +137,22 @@
   .mbar span { display:block; height:100%; border-radius:4px; }
   .mv { width:52px; text-align:right; font-variant-numeric:tabular-nums;
         font-weight:600; }
+  .scen { background:transparent; color:var(--muted);
+          border:1px solid var(--line); border-radius:8px;
+          padding:6px 16px; font-size:13px; }
+  .scen.active { background:var(--accent); color:#fff;
+                 border-color:var(--accent); font-weight:600; }
+  .posrow { display:inline-flex; gap:5px; flex-wrap:wrap; }
+  .posbtn { background:var(--surface); color:var(--muted);
+            border:1px solid var(--line); border-radius:8px;
+            padding:6px 13px; font-size:12.5px;
+            font-variant-numeric:tabular-nums; }
+  .posbtn.active { background:var(--accent-soft); color:var(--accent);
+                   border-color:var(--accent); font-weight:650; }
+  .chip { display:inline-flex; align-items:center; gap:7px;
+          background:var(--surface); border:1px solid var(--line);
+          border-radius:999px; padding:4px 13px; font-size:12.5px;
+          font-variant-numeric:tabular-nums; }
+  .chip .sw { width:10px; height:10px; border-radius:2px;
+              display:inline-block; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }

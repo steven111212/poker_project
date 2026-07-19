@@ -72,3 +72,79 @@ document.getElementById("importRanges").onchange = async e => {
   } catch { alert("匯入失敗:不是有效的範圍 JSON"); }
   e.target.value = "";
 };
+
+// ---------- spot picker (scenario tabs + position buttons) ----------
+const scenTabs = document.getElementById("scenTabs");
+const heroBtns = document.getElementById("heroBtns");
+const oppBtns = document.getElementById("oppBtns");
+const oppLbl = document.getElementById("oppLbl");
+let curScen = "rfi", curHero = "UTG", curOpp = null;
+
+function spotKeyOf(scen, hero, opp) {
+  if (scen === "rfi") return "RFI " + hero;
+  if (scen === "vsopen") return `${hero} vs ${opp} open`;
+  return `${hero} open 被 ${opp} 3bet`;
+}
+function heroChoices(scen) {
+  return scen === "vsopen"
+    ? ["HJ", "CO", "BTN", "SB", "BB"]
+    : ["UTG", "HJ", "CO", "BTN", "SB"];
+}
+function oppChoices(scen, hero) {
+  const i = POSN.indexOf(hero);
+  if (scen === "vsopen") return POSN.slice(0, i);   // opener acts before hero
+  if (scen === "vs3bet") return POSN.slice(i + 1);  // 3-bettor acts after hero
+  return [];
+}
+
+function renderPicker() {
+  scenTabs.querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.scen === curScen));
+  const hs = heroChoices(curScen);
+  if (!hs.includes(curHero)) curHero = hs[0];
+  const os = oppChoices(curScen, curHero);
+  if (os.length && !os.includes(curOpp))
+    curOpp = curScen === "vsopen" ? os[os.length - 1] : os[0];
+  if (!os.length) curOpp = null;
+
+  const posBtn = (p, active, key) => {
+    const unset = key && !spotExists(key);
+    return `<button class="posbtn${active ? " active" : ""}" data-p="${p}"
+      title="${key || ""}${unset ? "(未設定範圍)" : ""}">${p}${unset ? " ·" : ""}</button>`;
+  };
+  heroBtns.innerHTML = hs.map(p => posBtn(p, p === curHero,
+    curScen === "rfi" ? spotKeyOf("rfi", p) : null)).join("");
+  oppLbl.classList.toggle("hidden", !os.length);
+  oppBtns.classList.toggle("hidden", !os.length);
+  if (os.length) {
+    oppLbl.textContent = curScen === "vsopen" ? "對手 open 位" : "對手 3bet 位";
+    oppBtns.innerHTML = os.map(p => posBtn(p, p === curOpp,
+      spotKeyOf(curScen, curHero, p))).join("");
+  }
+  spotSel.value = spotKeyOf(curScen, curHero, curOpp);
+  renderRange();
+}
+
+scenTabs.querySelectorAll("button").forEach(b => {
+  b.onclick = () => { curScen = b.dataset.scen; renderPicker(); };
+});
+heroBtns.onclick = e => {
+  const b = e.target.closest(".posbtn");
+  if (b) { curHero = b.dataset.p; renderPicker(); }
+};
+oppBtns.onclick = e => {
+  const b = e.target.closest(".posbtn");
+  if (b) { curOpp = b.dataset.p; renderPicker(); }
+};
+
+function syncPicker(key) {
+  let m;
+  if (key.startsWith("RFI ")) {
+    curScen = "rfi"; curHero = key.slice(4); curOpp = null;
+  } else if ((m = key.match(/^(\w+) vs (\w+) open$/))) {
+    curScen = "vsopen"; curHero = m[1]; curOpp = m[2];
+  } else if ((m = key.match(/^(\w+) open 被 (\w+) 3bet$/))) {
+    curScen = "vs3bet"; curHero = m[1]; curOpp = m[2];
+  }
+  renderPicker();
+}

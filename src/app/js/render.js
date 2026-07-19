@@ -235,7 +235,7 @@ function renderAll() {
   });
 
   refreshSpotOptions();
-  renderRange(); renderMistakes(true);
+  renderPicker(); renderMistakes(true);
   renderJournal(D); renderNotes();
 }
 
@@ -311,8 +311,12 @@ function renderRange() {
     D.mistakes.filter(m => m.key === key).forEach(m =>
       (errs[m.hand] = errs[m.hand] || []).push(m));
   let html = "";
+  const combosOf = n => n.length === 2 ? 6 : (n[2] === "s" ? 4 : 12);
+  let comboR = 0, comboC = 0, comboTot = 0;
   for (const name of CLASSES) {
     const w = cellWeights(key, name);
+    const cmb = combosOf(name);
+    comboR += cmb * w.r / 100; comboC += cmb * w.c / 100; comboTot += cmb;
     const stops = [];
     let acc = 0;
     if (w.r > 0) { stops.push(`${C_RAISE} ${acc}% ${acc + w.r}%`); acc += w.r; }
@@ -344,6 +348,18 @@ function renderRange() {
     el.onmouseenter = e => { if (editMode.checked && e.buttons & 1)
       paintCell(el.dataset.hand); };
   });
+  const raiseLbl = key.startsWith("RFI") ? "Open" :
+                   key.includes(" vs ") ? "3-Bet" : "4-Bet";
+  const callLbl = key.startsWith("RFI") ? "Limp/Call" : "Call";
+  const pR = 100 * comboR / comboTot, pC = 100 * comboC / comboTot;
+  const chip = (sw, lbl, p, n) =>
+    `<span class="chip"><span class="sw" style="background:${sw}"></span>` +
+    `${lbl} <b>${p.toFixed(1)}%</b><span class="note">${Math.round(n)} combos</span></span>`;
+  document.getElementById("rangeStats").innerHTML =
+    chip(C_RAISE, raiseLbl, pR, comboR) +
+    chip(C_CALL, callLbl, pC, comboC) +
+    chip(C_FOLD, "Fold", 100 - pR - pC, comboTot - comboR - comboC) +
+    `<span class="chip">進池 <b>${(pR + pC).toFixed(1)}%</b></span>`;
   document.getElementById("customInfo").textContent =
     `此表自訂了 ${Object.keys(cust).length} 格` +
     (DEFAULTS[key] ? "" : "(此情境無預設,從全 fold 開始)");
@@ -387,8 +403,7 @@ function showHandDetail(hand) {
 
 function jumpToRange(key, hand) {
   if (![...spotSel.options].some(o => o.value === key)) return;
-  spotSel.value = key;
-  renderRange();
+  syncPicker(key);
   const target = document.querySelector(`#rangeGrid .cell[data-hand="${hand}"]`);
   document.getElementById("rangeGrid").scrollIntoView(
     { behavior: "smooth", block: "center" });

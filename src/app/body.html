@@ -101,11 +101,22 @@
 </div></section>
 
 <section data-pane="review"><h2>Ranges<span class="zh">範圍表(可自訂)</span></h2>
-<div class="controls">
-  <select id="spotSel"></select>
+<div class="controls" style="margin-bottom:8px;">
+  <span id="scenTabs">
+    <button class="scen active" data-scen="rfi">RFI</button>
+    <button class="scen" data-scen="vsopen">VS Open</button>
+    <button class="scen" data-scen="vs3bet">VS 3-Bet</button>
+  </span>
   <label><input type="checkbox" id="showErr" checked> 疊上我的錯誤</label>
   <label><input type="checkbox" id="editMode"> 編輯模式</label>
+  <select id="spotSel" class="hidden" aria-hidden="true"></select>
 </div>
+<div class="controls" style="margin-bottom:8px;">
+  <span class="note">位置</span><span class="posrow" id="heroBtns"></span>
+  <span class="note hidden" id="oppLbl"></span>
+  <span class="posrow hidden" id="oppBtns"></span>
+</div>
+<div class="controls" id="rangeStats" style="margin-bottom:8px;"></div>
 <div id="editorBar" class="hidden">
   <div class="controls" style="margin-bottom:6px;">
     <label>筆刷
