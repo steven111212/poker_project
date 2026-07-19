@@ -16,23 +16,35 @@ function parseHand(chunk) {
   if (!hd) return null;
   const h = { id: hd[1], sb: +hd[2], bb: +hd[3], ts: hd[4], seats: {},
               button: null, cards: null, actions: [], collected: 0,
-              uncalled: 0, invested: {}, rake: 0, showdown: false };
-  let street = "preflop", sc = {};
+              uncalled: 0, invested: {}, rake: 0, showdown: false,
+              stacksOf: {}, board: [], pots: [], shown: {}, totalPot: 0 };
+  let street = "preflop", sc = {}, pot = 0;
   const markers = { "*** FLOP ***": "flop", "*** TURN ***": "turn",
                     "*** RIVER ***": "river", "*** SHOWDOWN ***": "showdown",
                     "*** SUMMARY ***": "summary" };
   for (const line of lines.slice(1)) {
     const mk = Object.keys(markers).find(k => line.startsWith(k));
-    if (mk) { street = markers[mk]; sc = {}; continue; }
+    if (mk) {
+      street = markers[mk]; sc = {};
+      let bc;
+      if (street === "flop" && (bc = line.match(/\[(\w\w) (\w\w) (\w\w)\]/)))
+        h.board = [bc[1], bc[2], bc[3]];
+      else if ((street === "turn" || street === "river") &&
+               (bc = line.match(/\[(\w\w)\]\s*$/)))
+        h.board.push(bc[1]);
+      if (["flop", "turn", "river"].includes(street))
+        h.pots.push(Math.round(pot * 100) / 100);
+      continue;
+    }
     if (street === "summary") {
-      const rk = line.match(/^Total pot \$[\d.]+ \| Rake \$([\d.]+) \| Jackpot \$([\d.]+)/);
-      if (rk) h.rake = +rk[1] + +rk[2];
+      const rk = line.match(/^Total pot \$([\d.]+) \| Rake \$([\d.]+) \| Jackpot \$([\d.]+)/);
+      if (rk) { h.totalPot = +rk[1]; h.rake = +rk[2] + +rk[3]; }
       continue;
     }
     let m;
     if ((m = line.match(/Seat #(\d+) is the button/))) { h.button = +m[1]; continue; }
     if ((m = line.match(/^Seat (\d+): (\S+) \(\$([\d.]+) in chips\)/))) {
-      h.seats[+m[1]] = m[2]; continue; }
+      h.seats[+m[1]] = m[2]; h.stacksOf[m[2]] = +m[3]; continue; }
     if ((m = line.match(/^Dealt to Hero \[(\w\w) (\w\w)\]/))) {
       h.cards = [m[1], m[2]]; continue; }
     if ((m = line.match(/^(\S+) collected \$([\d.]+) from pot/))) {
@@ -42,7 +54,10 @@ function parseHand(chunk) {
     if (street === "showdown") {
       // real showdown = someone reveals or mucks (GG prints the marker even
       // when everyone folds, so the marker alone is not enough)
-      if ((m = line.match(/^(\S+): (?:shows \[|mucks)/))) {
+      if ((m = line.match(/^(\S+): shows \[(\w\w) (\w\w)\]/))) {
+        h.showdown = true; h.shown[m[1]] = [m[2], m[3]];
+        if (m[1] === "Hero") h.heroSD = true;
+      } else if ((m = line.match(/^(\S+): mucks/))) {
         h.showdown = true; if (m[1] === "Hero") h.heroSD = true;
       }
       continue;
@@ -61,7 +76,11 @@ function parseHand(chunk) {
     else { kind = "post_bb"; newTotal = prev + +m[7]; }
     sc[p] = newTotal;
     h.invested[p] = (h.invested[p] || 0) + (newTotal - prev);
-    h.actions.push({ street, p, kind });
+    pot += newTotal - prev;
+    // amt: raise = "to" total, call/bet/posts = chips added, fold/check = 0
+    const amt = kind === "raise" ? newTotal :
+                kind === "fold" || kind === "check" ? 0 : newTotal - prev;
+    h.actions.push({ street, p, kind, amt: Math.round(amt * 100) / 100 });
   }
   h.posOf = {};
   const nums = Object.keys(h.seats).map(Number).sort((a, b) => a - b);

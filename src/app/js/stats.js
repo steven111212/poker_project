@@ -64,9 +64,24 @@ function statFlags(h) {
       if (!aggrBet) break; // no continuation -> next street isn't a c-bet spot
     }
   }
-  return { ver: 2, v, p, t3, ats, sf, wt, wsd, ag, cb, fcb };
+  return { ver: 3, v, p, t3, ats, sf, wt, wsd, ag, cb, fcb };
 }
-const ST_VER = 2;
+const ST_VER = 3;
+
+// compact replay payload: seats/stacks, board, per-action amounts, showdown
+function replayData(h) {
+  const posOf = n => h.posOf[n] || n;
+  const stk = {};
+  for (const [n, v] of Object.entries(h.stacksOf)) stk[posOf(n)] = v;
+  const sh = {};
+  for (const [n, c] of Object.entries(h.shown)) sh[posOf(n)] = c;
+  return {
+    stk, sh,
+    hc: h.cards,                       // hero's exact cards
+    b: h.board, pots: h.pots, tp: h.totalPot,
+    a: h.actions.map(a => [a.street[0], posOf(a.p), a.kind, a.amt]),
+  };
+}
 
 // hands are stored raw-ish so ranges can be re-evaluated after edits
 function storedRecord(h) {
@@ -78,7 +93,7 @@ function storedRecord(h) {
            rk: h.collected > 0 ? Math.round(h.rake * 100) / 100 : 0,
            pf: [spot, opener ? (h.posOf[opener] || "") : null, action],
            tb: [tb ? (h.posOf[tb] || "") : null, resp],
-           st: statFlags(h) };
+           st: statFlags(h), rp: replayData(h) };
 }
 
 function decisionsOf(rec) {

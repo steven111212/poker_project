@@ -375,6 +375,7 @@ function renderRange() {
 
 function showHandDetail(hand) {
   const D = window._D || computeData();
+  const handsById = loadStore().hands;
   const list = D.mistakes.filter(m => m.hand === hand);
   const panel = document.getElementById("handDetail");
   if (!list.length) { panel.classList.add("hidden"); return; }
@@ -390,14 +391,17 @@ function showHandDetail(hand) {
       `<tr><td>${m.date}</td><td>${m.pos}</td><td>${m.spot}</td>` +
       `<td>${m.actual}</td><td>${m.correct}</td><td>${m.cat}</td>` +
       `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td>` +
-      `<td><button class="mini" data-key="${m.key}" data-hand="${hand}">查看範圍表</button> ` +
+      `<td>${(handsById[m.id] || {}).rp ?
+          `<button class="mini" data-replay="${m.id}">回顧牌局</button> ` : ""}` +
+      `<button class="mini ghost" data-key="${m.key}" data-hand="${hand}">範圍表</button> ` +
       `<button class="mini ghost" data-note="${m.id}">${noteLabel(loadNotes(), m.id)}</button></td></tr>`
     ).join("") + `</tbody></table></div>`;
   panel.querySelector(".close").onclick = () => panel.classList.add("hidden");
-  panel.querySelectorAll("button.mini[data-key]").forEach(b => {
+  panel.querySelectorAll("button[data-key]").forEach(b => {
     b.onclick = () => jumpToRange(b.dataset.key, b.dataset.hand);
   });
   wireNoteButtons(panel);
+  wireReplayButtons(panel);
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -424,14 +428,18 @@ function renderMistakes(rebuildFilter) {
   }
   const f = dateFilter.value;
   const notes = loadNotes();
+  const handsById = loadStore().hands;
   const tbody = document.querySelector("#mistakes tbody");
   tbody.innerHTML = D.mistakes
     .filter(m => !f || m.date === f)
     .map(m => `<tr><td>${m.date}</td><td>${m.hand}</td><td>${m.pos}</td><td>${m.spot}</td>` +
       `<td>${m.actual}</td><td>${m.correct}</td><td>${m.cat}</td>` +
       `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td><td>${m.id}</td>` +
-      `<td><button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`).join("");
+      `<td>${(handsById[m.id] || {}).rp ?
+          `<button class="mini" data-replay="${m.id}">回顧</button> ` : ""}` +
+      `<button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`).join("");
   wireNoteButtons(tbody);
+  wireReplayButtons(tbody);
 }
 
 spotSel.onchange = renderRange;

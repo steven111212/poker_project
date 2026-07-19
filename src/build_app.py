@@ -34,6 +34,7 @@ JS_ORDER = [
     "notes",         # per-hand notes
     "diary",         # session diary
     "backup",        # full export / import
+    "replay",        # N8-style hand replay modal
     "render",        # all dashboard rendering
     "tabs",          # tab navigation + boot
 ]
