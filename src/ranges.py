@@ -164,6 +164,64 @@ VS_3BET = {
         "4bet": expand(["KK+", "AKs", "AKo", "KJs", "KTs", "A5s"]),
         "call": expand(["QQ", "JJ", "TT", "99", "AQs", "KQs", "AJs"]),
     },
+    # ------------------------------------------------------------------
+    # Below: standard simplified 100bb defaults, NOT yet screenshot-
+    # calibrated. Spot-check against GTO Wizard / grindgto and correct
+    # either here or via the in-app range editor (custom overrides win).
+    # ------------------------------------------------------------------
+    ("UTG", "BTN"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "AQs", "AJs", "KQs"]),
+    },
+    ("UTG", "SB"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "AQs", "AJs", "KQs"]),
+    },
+    ("UTG", "BB"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "88", "AQs", "AJs", "KQs"]),
+    },
+    ("HJ", "CO"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s", "KJs"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "88", "AQs", "AJs", "ATs", "KQs"]),
+    },
+    ("HJ", "BTN"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "88", "AQs", "AJs", "KQs"]),
+    },
+    ("HJ", "SB"): {
+        "4bet": expand(["KK+", "AKs", "AKo", "A5s"]),
+        "call": expand(["QQ", "JJ", "TT", "99", "88", "AQs", "AJs", "KQs"]),
+    },
+    ("HJ", "BB"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "A5s"]),
+        "call": expand(["JJ", "TT", "99", "88", "77", "AQs", "AJs", "ATs", "KQs"]),
+    },
+    ("CO", "BTN"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "AQo", "A5s", "A4s"]),
+        "call": expand(["JJ", "TT", "99", "88", "77",
+                        "AQs", "AJs", "ATs", "KQs", "KJs"]),
+    },
+    ("CO", "SB"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "A5s", "A4s"]),
+        "call": expand(["JJ", "TT", "99", "88", "AQs", "AJs", "KQs", "KJs"]),
+    },
+    ("CO", "BB"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "A5s", "A4s"]),
+        "call": expand(["JJ", "TT", "99", "88", "77", "AQs", "AJs", "ATs", "KQs"]),
+    },
+    ("BTN", "SB"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "AQo", "A5s", "A4s"]),
+        "call": expand(["JJ", "TT", "99", "88", "77", "66",
+                        "AQs", "AJs", "ATs", "KQs", "KJs", "KTs",
+                        "QJs", "JTs", "T9s"]),
+    },
+    ("BTN", "BB"): {
+        "4bet": expand(["QQ+", "AKs", "AKo", "AQo", "A5s", "A4s"]),
+        "call": expand(["JJ", "TT", "99", "88", "77", "66",
+                        "AQs", "AJs", "ATs", "A9s", "KQs", "KJs", "KTs",
+                        "QJs", "JTs"]),
+    },
     # SB opened 3.5x, BB 3-bet to 10.5 (GTO Wizard screenshot 2026-07)
     ("SB", "BB"): {
         "4bet": expand(["TT+", "AKs", "AQs", "AKo", "AQo", "AJo", "ATo",
