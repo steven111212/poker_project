@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from dashboard import build_range_tables
+from ranges import SB_PURE_RAISE
 
 APP_DIR = Path(__file__).parent / "app"
 
@@ -36,6 +37,7 @@ JS_ORDER = [
     "backup",        # full export / import
     "replay",        # N8-style hand replay modal
     "render",        # all dashboard rendering
+    "trainer",       # preflop practice quiz
     "tabs",          # tab navigation + boot
 ]
 
@@ -47,7 +49,10 @@ def weighted_defaults() -> dict:
         wt = {}
         for hand, act in table.items():
             if key == "RFI SB" and act == "raise":
-                wt[hand] = {"r": 75, "c": 25, "f": 0}   # raise or limp both fine
+                # near-pure raises get no limp weight; the rest are mixed
+                wt[hand] = ({"r": 100, "c": 0, "f": 0}
+                            if hand in SB_PURE_RAISE
+                            else {"r": 60, "c": 40, "f": 0})
             elif key == "RFI SB" and act == "limp":
                 wt[hand] = {"r": 25, "c": 75, "f": 0}
             elif act in ("raise", "3bet", "4bet"):

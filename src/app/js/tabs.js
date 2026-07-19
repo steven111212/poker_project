@@ -12,6 +12,6 @@ document.querySelectorAll("#tabs button").forEach(b => {
 
 renderAll();
 const savedTab = loadJSON(UI_KEY, {}).tab;
-const validTabs = ["overview", "review", "journal", "data"];
+const validTabs = ["overview", "review", "practice", "journal", "data"];
 switchTab(validTabs.includes(savedTab) ? savedTab :
   (Object.keys(loadStore().hands).length ? "overview" : "data"));

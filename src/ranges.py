@@ -83,6 +83,12 @@ SB_RAISE = expand([
 ])
 SB_LIMP = RFI["SB"] - SB_RAISE
 
+# Cells that are (near-)pure raise in the screenshot -- no limp weight shown.
+SB_PURE_RAISE = expand([
+    "77+", "ATs+", "KTs+", "AQo+", "KQo", "ATo+",
+    "A9o", "A8o", "A7o", "A5o", "A4o", "K9o", "Q9o",
+])
+
 # ---------------------------------------------------------------------------
 # Facing an open raise: 3-bet / call ranges by (hero_pos, opener_pos)
 # ---------------------------------------------------------------------------

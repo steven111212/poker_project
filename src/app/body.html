@@ -7,6 +7,7 @@
 <nav class="tabs" id="tabs" aria-label="主導覽">
   <button data-tab="overview">📊 總覽</button>
   <button data-tab="review">🔍 檢討</button>
+  <button data-tab="practice">🎯 練習</button>
   <button data-tab="journal">📓 日誌</button>
   <button data-tab="data">📂 資料</button>
 </nav>
@@ -79,6 +80,28 @@
 <div class="tablewrap"><table id="sessions"><thead><tr>
 <th>日期</th><th>手數</th><th>盈虧(bb)</th><th>bb/100</th>
 <th>判定決策</th><th>偏差</th><th>偏差率</th></tr></thead><tbody></tbody></table></div></section>
+
+<section data-pane="practice"><h2>Practice<span class="zh">翻前練習</span></h2>
+<div class="controls" style="margin-bottom:10px;">
+  <span id="prMode">
+    <button class="scen active" data-mode="random">隨機練習</button>
+    <button class="scen" data-mode="weak">弱點練習(只出我打錯過的)</button>
+  </span>
+  <span class="note" id="prScore"></span>
+  <button class="ghost" id="prReset">重計分</button>
+</div>
+<div class="panel">
+  <div id="prQ" style="font-size:15px;"></div>
+  <div id="prHand" style="margin:14px 0;"></div>
+  <div class="controls" id="prActions" style="margin-bottom:0;"></div>
+  <div id="prFeedback" style="margin-top:12px; font-size:14px;"></div>
+  <div class="controls" style="margin:12px 0 0;">
+    <button id="prNext">下一題</button>
+    <button class="ghost hidden" id="prJump">查看範圍表</button>
+    <span class="note">快捷鍵:1/2/3 作答,Enter 下一題</span>
+  </div>
+</div>
+</section>
 
 <section data-pane="journal"><h2>Journal<span class="zh">Session 日記</span></h2>
 <div class="panel">
