@@ -67,18 +67,19 @@ RFI = {
     ]),
     # SB: raise + limp combined into one "playable" range; both raising and
     # limping these hands count as correct, folding them is flagged.
+    # Calibrated to user's GTO Wizard SB screenshot (2026-07-19).
     "SB": expand([
-        "22+", "A2s+", "K2s+", "Q2s+", "J3s+", "T4s+", "95s+", "85s+",
-        "74s+", "64s+", "53s+", "43s", "A2o+", "K8o+", "Q9o+", "J9o+",
-        "T8o+", "98o", "87o",
+        "22+", "A2s+", "K2s+", "Q2s+", "J3s+", "T5s+", "95s+", "85s+",
+        "74s+", "64s+", "53s+", "43s", "A2o+", "K8o+", "Q8o+", "J8o+",
+        "T8o+", "98o",
     ]),
 }
 
 # SB first-in split for display: majority-raise hands vs majority-limp hands.
-# Estimated from the GTO Wizard SB screenshot; correct cells as needed.
+# From the same screenshot; mixed cells rounded to the dominant action.
 SB_RAISE = expand([
-    "66+", "A2s+", "K8s+", "Q9s+", "J9s+", "T8s+", "97s+", "87s", "76s",
-    "65s", "A8o+", "A5o", "KTo+", "QTo+", "JTo",
+    "22+", "A2s+", "K2s+", "Q2s+", "J4s+", "T6s+", "96s+", "86s+",
+    "75s+", "65s", "54s", "A2o+", "K9o+", "Q9o+", "J9o+", "T9o",
 ])
 SB_LIMP = RFI["SB"] - SB_RAISE
 
