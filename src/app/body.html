@@ -180,7 +180,13 @@
 <div id="replayModal" class="hidden">
   <div class="rp-box">
     <button class="close" id="rpClose" title="關閉" aria-label="關閉">✕</button>
-    <div id="rpTitle"></div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div id="rpTitle" style="flex:1;"></div>
+      <span id="rpUnit">
+        <button class="posbtn" data-u="usd">$</button>
+        <button class="posbtn" data-u="bb">BB</button>
+      </span>
+    </div>
     <div class="rp-felt" id="rpFelt"></div>
     <div class="rp-streets" id="rpStreets"></div>
   </div>

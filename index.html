@@ -390,7 +390,13 @@
 <div id="replayModal" class="hidden">
   <div class="rp-box">
     <button class="close" id="rpClose" title="關閉" aria-label="關閉">✕</button>
-    <div id="rpTitle"></div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div id="rpTitle" style="flex:1;"></div>
+      <span id="rpUnit">
+        <button class="posbtn" data-u="usd">$</button>
+        <button class="posbtn" data-u="bb">BB</button>
+      </span>
+    </div>
     <div class="rp-felt" id="rpFelt"></div>
     <div class="rp-streets" id="rpStreets"></div>
   </div>
@@ -436,6 +442,11 @@ function loadNotes() { return loadJSON(NOTES_KEY, {}); }
 function saveNotes(n) { localStorage.setItem(NOTES_KEY, JSON.stringify(n)); }
 function loadDiary() { return loadJSON(DIARY_KEY, {}); }
 function saveDiary(d) { localStorage.setItem(DIARY_KEY, JSON.stringify(d)); }
+const UI_KEY = "poker_ui_v1";
+function saveUI(patch) {   // merge, so tab / unit prefs don't clobber each other
+  localStorage.setItem(UI_KEY,
+    JSON.stringify({ ...loadJSON(UI_KEY, {}), ...patch }));
+}
 const esc = s => String(s).replace(/[&<>"]/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -1222,7 +1233,13 @@ const pcard = c => c
     `${c[0] === "T" ? "10" : c[0]}${SUITS[c[1]]}</span>`
   : "";
 const cardBack = `<span class="pcard back"></span>`;
-const money = v => "$" + (Math.round(v * 100) / 100);
+
+// display unit: "$" or big blinds, switchable inside the modal
+let rpUnit = loadJSON(UI_KEY, {}).unit || "usd";
+let rpBB = 0.1, rpOpenId = null;
+const money = v => rpUnit === "bb"
+  ? (Math.round(v / rpBB * 10) / 10) + " bb"
+  : "$" + (Math.round(v * 100) / 100);
 
 function rpSeats(rec, rp) {
   const present = RING.filter(p => rp.stk[p] !== undefined);
@@ -1266,6 +1283,9 @@ function openReplay(id) {
   const rec = loadStore().hands[id];
   if (!rec || !rec.rp) return;
   const rp = rec.rp;
+  rpBB = rec.bb; rpOpenId = id;
+  document.querySelectorAll("#rpUnit button").forEach(b =>
+    b.classList.toggle("active", b.dataset.u === rpUnit));
   const bbAmt = Math.round(rec.net / rec.bb * 10) / 10;
   document.getElementById("rpTitle").innerHTML =
     `<b>${rec.date}</b> · ${rec.hc} · ${rec.pos} · ` +
@@ -1285,6 +1305,14 @@ function wireReplayButtons(root) {
     b.onclick = () => openReplay(b.dataset.replay);
   });
 }
+
+document.querySelectorAll("#rpUnit button").forEach(b => {
+  b.onclick = () => {
+    rpUnit = b.dataset.u;
+    saveUI({ unit: rpUnit });
+    if (rpOpenId) openReplay(rpOpenId);   // re-render in the new unit
+  };
+});
 
 document.getElementById("rpClose").onclick = () => rpModal.classList.add("hidden");
 rpModal.onclick = e => { if (e.target === rpModal) rpModal.classList.add("hidden"); };
@@ -1741,13 +1769,12 @@ showErr.onchange = renderRange;
 dateFilter.onchange = () => renderMistakes(false);
 
 // ---------- tabs ----------
-const UI_KEY = "poker_ui_v1";
 function switchTab(name) {
   document.querySelectorAll("#tabs button").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll("[data-pane]").forEach(el =>
     el.classList.toggle("pane-active", el.dataset.pane === name));
-  localStorage.setItem(UI_KEY, JSON.stringify({ tab: name }));
+  saveUI({ tab: name });
 }
 document.querySelectorAll("#tabs button").forEach(b => {
   b.onclick = () => { switchTab(b.dataset.tab); window.scrollTo({ top: 0 }); };

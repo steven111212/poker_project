@@ -11,7 +11,13 @@ const pcard = c => c
     `${c[0] === "T" ? "10" : c[0]}${SUITS[c[1]]}</span>`
   : "";
 const cardBack = `<span class="pcard back"></span>`;
-const money = v => "$" + (Math.round(v * 100) / 100);
+
+// display unit: "$" or big blinds, switchable inside the modal
+let rpUnit = loadJSON(UI_KEY, {}).unit || "usd";
+let rpBB = 0.1, rpOpenId = null;
+const money = v => rpUnit === "bb"
+  ? (Math.round(v / rpBB * 10) / 10) + " bb"
+  : "$" + (Math.round(v * 100) / 100);
 
 function rpSeats(rec, rp) {
   const present = RING.filter(p => rp.stk[p] !== undefined);
@@ -55,6 +61,9 @@ function openReplay(id) {
   const rec = loadStore().hands[id];
   if (!rec || !rec.rp) return;
   const rp = rec.rp;
+  rpBB = rec.bb; rpOpenId = id;
+  document.querySelectorAll("#rpUnit button").forEach(b =>
+    b.classList.toggle("active", b.dataset.u === rpUnit));
   const bbAmt = Math.round(rec.net / rec.bb * 10) / 10;
   document.getElementById("rpTitle").innerHTML =
     `<b>${rec.date}</b> · ${rec.hc} · ${rec.pos} · ` +
@@ -74,6 +83,14 @@ function wireReplayButtons(root) {
     b.onclick = () => openReplay(b.dataset.replay);
   });
 }
+
+document.querySelectorAll("#rpUnit button").forEach(b => {
+  b.onclick = () => {
+    rpUnit = b.dataset.u;
+    saveUI({ unit: rpUnit });
+    if (rpOpenId) openReplay(rpOpenId);   // re-render in the new unit
+  };
+});
 
 document.getElementById("rpClose").onclick = () => rpModal.classList.add("hidden");
 rpModal.onclick = e => { if (e.target === rpModal) rpModal.classList.add("hidden"); };
