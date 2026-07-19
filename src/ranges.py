@@ -130,9 +130,12 @@ VS_OPEN = {
         "3bet": expand(["99+", "ATs+", "AJo+", "KQo", "KJo", "KTs+", "QTs+", "JTs", "T9s", "K9s", "A5s", "A4s"]),
         "call": expand([]),
     },
+    # calibrated to user's GTO Wizard SB-vs-BTN screenshot (2026-07-19)
     ("SB", "BTN"): {
-        "3bet": expand(["88+", "AKs", "ATs", "A9s", "A8s", "A5s", "A4s", "KJs", "KTs", "QTs+", "JTs", "T9s", "AJo+", "KQo", "KJo"]),
-        "call": expand(["AQs", "AJs", "KQs", "77", "66", "55"]),
+        "3bet": expand(["99+", "AJs+", "A8s", "A7s", "A6s", "A5s", "A4s",
+                        "A3s", "A2s", "KQs", "KJs", "KTs", "K9s",
+                        "QJs", "QTs", "JTs", "ATo+", "KQo", "KJo", "QJo"]),
+        "call": expand(["ATs", "A9s", "88", "77", "55"]),
     },
     ("BB", "UTG"): {
         "3bet": expand(["KK+", "AKs", "AKo", "A6s", "K5s", "Q9s"]),
