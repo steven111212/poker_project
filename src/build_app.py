@@ -42,8 +42,16 @@ JS_ORDER = [
 ]
 
 
+GW_RANGES = Path(__file__).parent / "gw_ranges.json"
+
+
 def weighted_defaults() -> dict:
-    """Convert pure-strategy tables to weight form {r, c, f} (percent)."""
+    """Weighted default tables {hand: {r, c, f[, a]}} (percent).
+
+    Base: pure-strategy tables from ranges.py. Overridden by gw_ranges.json
+    (exact mixed frequencies harvested from the user's own GTO Wizard
+    account, simplified to integer percents) for every spot present there.
+    """
     out = {}
     for key, table in build_range_tables().items():
         wt = {}
@@ -62,6 +70,9 @@ def weighted_defaults() -> dict:
             else:
                 wt[hand] = {"r": 0, "c": 0, "f": 100}
         out[key] = wt
+    if GW_RANGES.exists():
+        gw = json.loads(GW_RANGES.read_text(encoding="utf-8"))
+        out.update(gw)
     return out
 
 

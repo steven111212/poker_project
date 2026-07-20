@@ -23,11 +23,16 @@ dashboard.html 已移除,功能全部併入 index.html。
 
 | 類別 | 張數 | 狀態 |
 |---|---|---|
-| RFI(UTG/HJ/CO/BTN/SB) | 5 | ✅ 已校正 |
-| vs open(各位置組合) | 15 | ✅ 已校正 |
-| vs 3-bet(UTG 被 HJ/CO、SB 被 BB) | 3 | ✅ 已校正 |
-| vs 3-bet(其餘 12 張) | 12 | ⚠ 標準簡化版,未經截圖校正,建議抽查 |
+| RFI(UTG/HJ/CO/BTN) | 4 | ✅ GW 精確混頻(src/gw_ranges.json) |
+| RFI SB | 1 | ✅ 截圖校正(純策略 + raise/limp 分級) |
+| vs open(各位置組合) | 15 | ✅ GW 精確混頻 |
+| vs 3-bet(全部) | 15 | ✅ GW 精確混頻 |
 | vs 4-bet / squeeze | - | ⬜ 未來擴充 |
+
+混頻來源:2026-07-20 以使用者本人 GTO Wizard 帳號(NL25 100bb 一般樹,
+open 2.5/SB 3.5、3bet IP 8 / SB 11 / BB 13.5)擷取 34 個翻前情境,
+化簡為整數百分比(<3% 忽略),含 allin 權重。重抓流程:登入後跑
+scratchpad 的 gw_harvest.js + gw_transform.js(注意帳號 100 次/日配額)。
 
 原則:**純策略、不帶混合頻率**(≥50% 的動作為準)。
 混頻邊界牌(如 88 call UTG open)被標記時自行斟酌。
