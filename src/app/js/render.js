@@ -235,6 +235,7 @@ function renderAll() {
     el.onclick = () => showHandDetail(el.dataset.hand);
   });
 
+  renderProfileSel();
   refreshSpotOptions();
   renderPicker(); renderMistakes(true);
   renderJournal(D); renderNotes();

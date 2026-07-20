@@ -336,6 +336,13 @@
 
 <section data-pane="review"><h2>Ranges<span class="zh">範圍表(可自訂)</span></h2>
 <div class="controls" style="margin-bottom:8px;">
+  <label>範圍組 <select id="profSel"></select></label>
+  <button class="ghost mini" id="profNew">＋新增</button>
+  <button class="ghost mini" id="profRen">改名</button>
+  <button class="danger mini" id="profDel">刪除</button>
+  <span class="note">不同級別 / 不同 bb 數可各建一套;判定與練習用當前範圍組</span>
+</div>
+<div class="controls" style="margin-bottom:8px;">
   <span id="scenTabs">
     <button class="scen active" data-scen="rfi">RFI</button>
     <button class="scen" data-scen="vsopen">VS Open</button>
@@ -463,8 +470,25 @@ const loadJSON = (k, dflt) => {
 function loadStore() { return loadJSON(STORE_KEY, { hands: {} }); }
 function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 function loadGoal() { return loadJSON(GOAL_KEY, { bb: 0.1, target: 500 }); }
-function loadCustom() { return loadJSON(RANGE_KEY, {}); }
-function saveCustom(c) { localStorage.setItem(RANGE_KEY, JSON.stringify(c)); }
+// range profiles: named sets of custom-range overrides (per stake / depth)
+const PROF_KEY = "poker_range_profiles_v1";
+function loadProfiles() {
+  let p = loadJSON(PROF_KEY, null);
+  if (!p || !p.profiles) {
+    // migrate legacy single custom-range store into a default profile
+    p = { active: "預設", profiles: { "預設": loadJSON(RANGE_KEY, {}) } };
+    localStorage.setItem(PROF_KEY, JSON.stringify(p));
+  }
+  if (!p.profiles[p.active]) p.active = Object.keys(p.profiles)[0];
+  return p;
+}
+function saveProfiles(p) { localStorage.setItem(PROF_KEY, JSON.stringify(p)); }
+function loadCustom() {
+  const p = loadProfiles(); return p.profiles[p.active] || {};
+}
+function saveCustom(c) {
+  const p = loadProfiles(); p.profiles[p.active] = c; saveProfiles(p);
+}
 function loadNotes() { return loadJSON(NOTES_KEY, {}); }
 function saveNotes(n) { localStorage.setItem(NOTES_KEY, JSON.stringify(n)); }
 function loadDiary() { return loadJSON(DIARY_KEY, {}); }
@@ -1015,6 +1039,52 @@ document.getElementById("importRanges").onchange = async e => {
   e.target.value = "";
 };
 
+// ---------- range profiles ----------
+const profSel = document.getElementById("profSel");
+
+function renderProfileSel() {
+  const p = loadProfiles();
+  profSel.innerHTML = Object.keys(p.profiles).map(n => {
+    const cnt = Object.keys(p.profiles[n] || {}).length;
+    return `<option value="${esc(n)}">${esc(n)}${cnt ? `(自訂 ${cnt} 表)` : ""}</option>`;
+  }).join("");
+  profSel.value = p.active;
+}
+
+profSel.onchange = () => {
+  const p = loadProfiles();
+  p.active = profSel.value; saveProfiles(p);
+  renderAll();   // judging + trainer follow the active profile
+};
+document.getElementById("profNew").onclick = () => {
+  const name = (prompt("新範圍組名稱(例如 NL50、40bb):") || "").trim();
+  if (!name) return;
+  const p = loadProfiles();
+  if (p.profiles[name]) { alert("已有同名範圍組"); return; }
+  const copy = confirm("要複製目前範圍組的自訂內容嗎?\n確定=複製,取消=從空白(全用預設)開始");
+  p.profiles[name] = copy
+    ? JSON.parse(JSON.stringify(p.profiles[p.active] || {}))
+    : {};
+  p.active = name; saveProfiles(p); renderAll();
+};
+document.getElementById("profRen").onclick = () => {
+  const p = loadProfiles();
+  const name = (prompt(`把「${p.active}」改名為:`, p.active) || "").trim();
+  if (!name || name === p.active) return;
+  if (p.profiles[name]) { alert("已有同名範圍組"); return; }
+  p.profiles[name] = p.profiles[p.active];
+  delete p.profiles[p.active];
+  p.active = name; saveProfiles(p); renderAll();
+};
+document.getElementById("profDel").onclick = () => {
+  const p = loadProfiles();
+  if (Object.keys(p.profiles).length <= 1) { alert("至少要保留一個範圍組"); return; }
+  if (!confirm(`刪除範圍組「${p.active}」?其自訂內容會消失(預設範圍不受影響)。`)) return;
+  delete p.profiles[p.active];
+  p.active = Object.keys(p.profiles)[0];
+  saveProfiles(p); renderAll();
+};
+
 // ---------- spot picker (scenario tabs + position buttons) ----------
 const scenTabs = document.getElementById("scenTabs");
 const heroBtns = document.getElementById("heroBtns");
@@ -1223,9 +1293,10 @@ function renderJournal(D) {
 
 // ---------- full backup ----------
 document.getElementById("backupBtn").onclick = () => {
-  const data = { app: "poker_growth", version: 1,
+  const data = { app: "poker_growth", version: 2,
     exported: new Date().toISOString(),
-    hands: loadStore().hands, goal: loadGoal(), ranges: loadCustom(),
+    hands: loadStore().hands, goal: loadGoal(),
+    rangeProfiles: loadProfiles(),
     notes: loadNotes(), diary: loadDiary() };
   const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   const a = document.createElement("a");
@@ -1251,7 +1322,15 @@ document.getElementById("restoreFile").onchange = async e => {
     saveStore(store);
     saveNotes({ ...loadNotes(), ...(data.notes || {}) });
     saveDiary({ ...loadDiary(), ...(data.diary || {}) });
-    saveCustom({ ...loadCustom(), ...(data.ranges || {}) });
+    if (data.rangeProfiles && data.rangeProfiles.profiles) {
+      const p = loadProfiles();
+      Object.assign(p.profiles, data.rangeProfiles.profiles);
+      if (data.rangeProfiles.active && p.profiles[data.rangeProfiles.active])
+        p.active = data.rangeProfiles.active;
+      saveProfiles(p);
+    } else if (data.ranges) {   // v1 backups: merge into active profile
+      saveCustom({ ...loadCustom(), ...data.ranges });
+    }
     if (data.goal) localStorage.setItem(GOAL_KEY, JSON.stringify(data.goal));
     alert(`匯入完成:新增 ${added} 手,筆記 ${Object.keys(data.notes || {}).length} 則、` +
           `日記 ${Object.keys(data.diary || {}).length} 篇已合併。`);
@@ -1597,6 +1676,7 @@ function renderAll() {
     el.onclick = () => showHandDetail(el.dataset.hand);
   });
 
+  renderProfileSel();
   refreshSpotOptions();
   renderPicker(); renderMistakes(true);
   renderJournal(D); renderNotes();

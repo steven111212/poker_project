@@ -5,8 +5,25 @@ const loadJSON = (k, dflt) => {
 function loadStore() { return loadJSON(STORE_KEY, { hands: {} }); }
 function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 function loadGoal() { return loadJSON(GOAL_KEY, { bb: 0.1, target: 500 }); }
-function loadCustom() { return loadJSON(RANGE_KEY, {}); }
-function saveCustom(c) { localStorage.setItem(RANGE_KEY, JSON.stringify(c)); }
+// range profiles: named sets of custom-range overrides (per stake / depth)
+const PROF_KEY = "poker_range_profiles_v1";
+function loadProfiles() {
+  let p = loadJSON(PROF_KEY, null);
+  if (!p || !p.profiles) {
+    // migrate legacy single custom-range store into a default profile
+    p = { active: "預設", profiles: { "預設": loadJSON(RANGE_KEY, {}) } };
+    localStorage.setItem(PROF_KEY, JSON.stringify(p));
+  }
+  if (!p.profiles[p.active]) p.active = Object.keys(p.profiles)[0];
+  return p;
+}
+function saveProfiles(p) { localStorage.setItem(PROF_KEY, JSON.stringify(p)); }
+function loadCustom() {
+  const p = loadProfiles(); return p.profiles[p.active] || {};
+}
+function saveCustom(c) {
+  const p = loadProfiles(); p.profiles[p.active] = c; saveProfiles(p);
+}
 function loadNotes() { return loadJSON(NOTES_KEY, {}); }
 function saveNotes(n) { localStorage.setItem(NOTES_KEY, JSON.stringify(n)); }
 function loadDiary() { return loadJSON(DIARY_KEY, {}); }

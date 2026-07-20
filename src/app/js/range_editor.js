@@ -81,6 +81,52 @@ document.getElementById("importRanges").onchange = async e => {
   e.target.value = "";
 };
 
+// ---------- range profiles ----------
+const profSel = document.getElementById("profSel");
+
+function renderProfileSel() {
+  const p = loadProfiles();
+  profSel.innerHTML = Object.keys(p.profiles).map(n => {
+    const cnt = Object.keys(p.profiles[n] || {}).length;
+    return `<option value="${esc(n)}">${esc(n)}${cnt ? `(自訂 ${cnt} 表)` : ""}</option>`;
+  }).join("");
+  profSel.value = p.active;
+}
+
+profSel.onchange = () => {
+  const p = loadProfiles();
+  p.active = profSel.value; saveProfiles(p);
+  renderAll();   // judging + trainer follow the active profile
+};
+document.getElementById("profNew").onclick = () => {
+  const name = (prompt("新範圍組名稱(例如 NL50、40bb):") || "").trim();
+  if (!name) return;
+  const p = loadProfiles();
+  if (p.profiles[name]) { alert("已有同名範圍組"); return; }
+  const copy = confirm("要複製目前範圍組的自訂內容嗎?\n確定=複製,取消=從空白(全用預設)開始");
+  p.profiles[name] = copy
+    ? JSON.parse(JSON.stringify(p.profiles[p.active] || {}))
+    : {};
+  p.active = name; saveProfiles(p); renderAll();
+};
+document.getElementById("profRen").onclick = () => {
+  const p = loadProfiles();
+  const name = (prompt(`把「${p.active}」改名為:`, p.active) || "").trim();
+  if (!name || name === p.active) return;
+  if (p.profiles[name]) { alert("已有同名範圍組"); return; }
+  p.profiles[name] = p.profiles[p.active];
+  delete p.profiles[p.active];
+  p.active = name; saveProfiles(p); renderAll();
+};
+document.getElementById("profDel").onclick = () => {
+  const p = loadProfiles();
+  if (Object.keys(p.profiles).length <= 1) { alert("至少要保留一個範圍組"); return; }
+  if (!confirm(`刪除範圍組「${p.active}」?其自訂內容會消失(預設範圍不受影響)。`)) return;
+  delete p.profiles[p.active];
+  p.active = Object.keys(p.profiles)[0];
+  saveProfiles(p); renderAll();
+};
+
 // ---------- spot picker (scenario tabs + position buttons) ----------
 const scenTabs = document.getElementById("scenTabs");
 const heroBtns = document.getElementById("heroBtns");

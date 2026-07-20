@@ -1,8 +1,9 @@
 // ---------- full backup ----------
 document.getElementById("backupBtn").onclick = () => {
-  const data = { app: "poker_growth", version: 1,
+  const data = { app: "poker_growth", version: 2,
     exported: new Date().toISOString(),
-    hands: loadStore().hands, goal: loadGoal(), ranges: loadCustom(),
+    hands: loadStore().hands, goal: loadGoal(),
+    rangeProfiles: loadProfiles(),
     notes: loadNotes(), diary: loadDiary() };
   const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   const a = document.createElement("a");
@@ -28,7 +29,15 @@ document.getElementById("restoreFile").onchange = async e => {
     saveStore(store);
     saveNotes({ ...loadNotes(), ...(data.notes || {}) });
     saveDiary({ ...loadDiary(), ...(data.diary || {}) });
-    saveCustom({ ...loadCustom(), ...(data.ranges || {}) });
+    if (data.rangeProfiles && data.rangeProfiles.profiles) {
+      const p = loadProfiles();
+      Object.assign(p.profiles, data.rangeProfiles.profiles);
+      if (data.rangeProfiles.active && p.profiles[data.rangeProfiles.active])
+        p.active = data.rangeProfiles.active;
+      saveProfiles(p);
+    } else if (data.ranges) {   // v1 backups: merge into active profile
+      saveCustom({ ...loadCustom(), ...data.ranges });
+    }
     if (data.goal) localStorage.setItem(GOAL_KEY, JSON.stringify(data.goal));
     alert(`匯入完成:新增 ${added} 手,筆記 ${Object.keys(data.notes || {}).length} 則、` +
           `日記 ${Object.keys(data.diary || {}).length} 篇已合併。`);
