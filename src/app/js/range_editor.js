@@ -21,11 +21,19 @@ function brushWeights() {
   const b = brushSel.value;
   if (b === "r") return { r: 100, c: 0, f: 0 };
   if (b === "c") return { r: 0, c: 100, f: 0 };
+  if (b === "a") return { r: 0, c: 0, f: 0, a: 100 };
   if (b === "f") return { r: 0, c: 0, f: 100 };
   if (b === "mix") {
-    let r = Math.max(0, Math.min(100, +document.getElementById("mixR").value || 0));
-    let c = Math.max(0, Math.min(100 - r, +document.getElementById("mixC").value || 0));
-    return { r, c, f: 100 - r - c };
+    const val = id => Math.max(0, Math.min(100, +document.getElementById(id).value || 0));
+    let r = val("mixR");
+    let c = Math.min(100 - r, val("mixC"));
+    let a = Math.min(100 - r - c, val("mixA"));
+    const fIn = document.getElementById("mixF").value;
+    let f = fIn === "" ? 100 - r - c - a
+                       : Math.min(100 - r - c - a, val("mixF"));
+    const w = { r, c, f };
+    if (a > 0) w.a = a;
+    return w;
   }
   return null; // reset
 }

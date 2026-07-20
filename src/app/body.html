@@ -146,6 +146,7 @@
       <select id="brushSel">
         <option value="r">raise 100%</option>
         <option value="c">call/limp 100%</option>
+        <option value="a">allin 100%</option>
         <option value="f">fold 100%</option>
         <option value="mix">自訂混合</option>
         <option value="reset">恢復此格預設</option>
@@ -153,7 +154,9 @@
     <span id="mixInputs" class="hidden">
       <label>raise% <input type="number" id="mixR" value="50" min="0" max="100"></label>
       <label>call% <input type="number" id="mixC" value="50" min="0" max="100"></label>
-      <span class="note">fold% 自動 = 剩餘</span>
+      <label>allin% <input type="number" id="mixA" value="0" min="0" max="100"></label>
+      <label>fold% <input type="number" id="mixF" value="" placeholder="自動" min="0" max="100"></label>
+      <span class="note">四項合計 100;fold 留空 = 自動補剩餘</span>
     </span>
   </div>
   <div class="controls" style="margin-bottom:0;">

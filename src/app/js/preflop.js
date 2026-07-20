@@ -33,13 +33,15 @@ const RAISE_NAME = { rfi: "raise", vs_open: "3bet", vs_3bet: "4bet" };
 function weightsLabel(w, kind) {
   const parts = [];
   if (w.r > 0) parts.push(`${RAISE_NAME[kind]} ${w.r}`);
+  if ((w.a || 0) > 0) parts.push(`allin ${w.a}`);
   if (w.c > 0) parts.push(`${kind === "rfi" ? "limp/call" : "call"} ${w.c}`);
   if (w.f > 0) parts.push(`fold ${w.f}`);
   return parts.join(" / ") || "fold 100";
 }
 
 function categorize(kind, actual, w) {
-  const dom = w.r >= w.c && w.r >= w.f ? "raise" : (w.c >= w.f ? "call" : "fold");
+  const ra = w.r + (w.a || 0);
+  const dom = ra >= w.c && ra >= w.f ? "raise" : (w.c >= w.f ? "call" : "fold");
   if (kind === "rfi") {
     if (actual === "fold") return "RFI 太緊(該 open 沒 open)";
     if (actual === "limp/call") return "RFI 用 limp";
@@ -56,7 +58,10 @@ function categorize(kind, actual, w) {
 function judge(key, hand, kind, actual) {
   // actual in {"raise","call","fold"} weight-space
   const w = cellWeights(key, hand);
-  const freq = actual === "raise" ? w.r : actual === "call" ? w.c : w.f;
+  // a raise in the hand history also covers the all-in weight (GG logs
+  // preflop jams as raises)
+  const freq = actual === "raise" ? w.r + (w.a || 0) :
+               actual === "call" ? w.c : w.f;
   return { ok: freq >= FREQ_OK, w };
 }
 

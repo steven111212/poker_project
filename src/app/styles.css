@@ -143,6 +143,7 @@
   .scen.active { background:var(--accent); color:#fff;
                  border-color:var(--accent); font-weight:600; }
   .posrow { display:inline-flex; gap:5px; flex-wrap:wrap; }
+  .posrow.hidden, .note.hidden { display:none; }
   .posbtn { background:var(--surface); color:var(--muted);
             border:1px solid var(--line); border-radius:8px;
             padding:6px 13px; font-size:12.5px;

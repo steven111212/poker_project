@@ -13,7 +13,8 @@ function catColor(c) {
   if (/^該 call 卻/.test(c)) return "#6bd6ff";
   return "#ffffff";
 }
-const C_RAISE = "#c0392b", C_CALL = "#2e8b57", C_FOLD = "#31537d";
+const C_RAISE = "#c0392b", C_ALLIN = "#7d1f4e", C_CALL = "#2e8b57",
+      C_FOLD = "#31537d";
 const dateFilter = document.getElementById("dateFilter");
 
 function computeData() {
@@ -312,21 +313,26 @@ function renderRange() {
       (errs[m.hand] = errs[m.hand] || []).push(m));
   let html = "";
   const combosOf = n => n.length === 2 ? 6 : (n[2] === "s" ? 4 : 12);
-  let comboR = 0, comboC = 0, comboTot = 0;
+  let comboR = 0, comboC = 0, comboA = 0, comboTot = 0;
   for (const name of CLASSES) {
     const w = cellWeights(key, name);
+    const wa = w.a || 0;
     const cmb = combosOf(name);
-    comboR += cmb * w.r / 100; comboC += cmb * w.c / 100; comboTot += cmb;
+    comboR += cmb * w.r / 100; comboC += cmb * w.c / 100;
+    comboA += cmb * wa / 100; comboTot += cmb;
     const stops = [];
     let acc = 0;
     if (w.r > 0) { stops.push(`${C_RAISE} ${acc}% ${acc + w.r}%`); acc += w.r; }
+    if (wa > 0) { stops.push(`${C_ALLIN} ${acc}% ${acc + wa}%`); acc += wa; }
     if (w.c > 0) { stops.push(`${C_CALL} ${acc}% ${acc + w.c}%`); acc += w.c; }
     if (w.f > 0) { stops.push(`${C_FOLD} ${acc}% 100%`); }
     const bg = stops.length > 1 ?
       `linear-gradient(to right, ${stops.join(", ")})` :
-      (w.r === 100 ? C_RAISE : w.c === 100 ? C_CALL : C_FOLD);
+      (w.r === 100 ? C_RAISE : wa === 100 ? C_ALLIN :
+       w.c === 100 ? C_CALL : C_FOLD);
     let inner = name, extra = "",
-        title = `${name}:raise ${w.r} / call ${w.c} / fold ${w.f}`;
+        title = `${name}:raise ${w.r}${wa ? ` / allin ${wa}` : ""}` +
+                ` / call ${w.c} / fold ${w.f}`;
     if (cust[name]) inner += `<span class="custommark">●</span>`;
     const e = errs[name];
     if (e) {
@@ -351,21 +357,25 @@ function renderRange() {
   const raiseLbl = key.startsWith("RFI") ? "Open" :
                    key.includes(" vs ") ? "3-Bet" : "4-Bet";
   const callLbl = key.startsWith("RFI") ? "Limp/Call" : "Call";
-  const pR = 100 * comboR / comboTot, pC = 100 * comboC / comboTot;
+  const pR = 100 * comboR / comboTot, pC = 100 * comboC / comboTot,
+        pA = 100 * comboA / comboTot;
   const chip = (sw, lbl, p, n) =>
     `<span class="chip"><span class="sw" style="background:${sw}"></span>` +
     `${lbl} <b>${p.toFixed(1)}%</b><span class="note">${Math.round(n)} combos</span></span>`;
   document.getElementById("rangeStats").innerHTML =
     chip(C_RAISE, raiseLbl, pR, comboR) +
+    (comboA > 0 ? chip(C_ALLIN, "All-in", pA, comboA) : "") +
     chip(C_CALL, callLbl, pC, comboC) +
-    chip(C_FOLD, "Fold", 100 - pR - pC, comboTot - comboR - comboC) +
-    `<span class="chip">進池 <b>${(pR + pC).toFixed(1)}%</b></span>`;
+    chip(C_FOLD, "Fold", 100 - pR - pC - pA,
+         comboTot - comboR - comboC - comboA) +
+    `<span class="chip">進池 <b>${(pR + pC + pA).toFixed(1)}%</b></span>`;
   document.getElementById("customInfo").textContent =
     `此表自訂了 ${Object.keys(cust).length} 格` +
     (DEFAULTS[key] ? "" : "(此情境無預設,從全 fold 開始)");
   const catsHere = [...new Set(D.mistakes.filter(m => m.key === key).map(m => m.cat))];
   document.getElementById("legend").innerHTML =
     `<span class="lg"><span style="background:${C_RAISE}"></span>raise/3bet/4bet</span>` +
+    `<span class="lg"><span style="background:${C_ALLIN}"></span>allin</span>` +
     `<span class="lg"><span style="background:${C_CALL}"></span>call/limp</span>` +
     `<span class="lg"><span style="background:${C_FOLD}"></span>fold</span>` +
     `<span class="lg">● = 自訂格</span>` +

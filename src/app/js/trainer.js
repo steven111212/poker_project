@@ -86,7 +86,8 @@ function answerQuestion(act) {
   if (prAnswered || !prCur) return;
   prAnswered = true;
   const w = cellWeights(prCur.key, prCur.hand);
-  const freq = act === "r" ? w.r : act === "c" ? w.c : w.f;
+  const freqOf = a => a === "r" ? w.r + (w.a || 0) : a === "c" ? w.c : w.f;
+  const freq = freqOf(act);
   const ok = freq >= FREQ_OK;
   prScore.tot++; if (ok) prScore.ok++;
   const kind = kindOf(prCur.key);
@@ -96,7 +97,7 @@ function answerQuestion(act) {
     ` <span class="note">基準:${weightsLabel(w, kind)}` +
     `(選的動作權重 ${freq}%,≥${FREQ_OK}% 算對)</span>`;
   prActions.querySelectorAll("button").forEach(b => {
-    const f = b.dataset.act === "r" ? w.r : b.dataset.act === "c" ? w.c : w.f;
+    const f = freqOf(b.dataset.act);
     if (b.dataset.act === act)
       b.style.borderColor = ok ? "var(--win)" : "var(--loss)";
     if (f >= FREQ_OK) b.style.background = "var(--accent-soft)";

@@ -150,6 +150,7 @@
   .scen.active { background:var(--accent); color:#fff;
                  border-color:var(--accent); font-weight:600; }
   .posrow { display:inline-flex; gap:5px; flex-wrap:wrap; }
+  .posrow.hidden, .note.hidden { display:none; }
   .posbtn { background:var(--surface); color:var(--muted);
             border:1px solid var(--line); border-radius:8px;
             padding:6px 13px; font-size:12.5px;
@@ -356,6 +357,7 @@
       <select id="brushSel">
         <option value="r">raise 100%</option>
         <option value="c">call/limp 100%</option>
+        <option value="a">allin 100%</option>
         <option value="f">fold 100%</option>
         <option value="mix">自訂混合</option>
         <option value="reset">恢復此格預設</option>
@@ -363,7 +365,9 @@
     <span id="mixInputs" class="hidden">
       <label>raise% <input type="number" id="mixR" value="50" min="0" max="100"></label>
       <label>call% <input type="number" id="mixC" value="50" min="0" max="100"></label>
-      <span class="note">fold% 自動 = 剩餘</span>
+      <label>allin% <input type="number" id="mixA" value="0" min="0" max="100"></label>
+      <label>fold% <input type="number" id="mixF" value="" placeholder="自動" min="0" max="100"></label>
+      <span class="note">四項合計 100;fold 留空 = 自動補剩餘</span>
     </span>
   </div>
   <div class="controls" style="margin-bottom:0;">
@@ -656,13 +660,15 @@ const RAISE_NAME = { rfi: "raise", vs_open: "3bet", vs_3bet: "4bet" };
 function weightsLabel(w, kind) {
   const parts = [];
   if (w.r > 0) parts.push(`${RAISE_NAME[kind]} ${w.r}`);
+  if ((w.a || 0) > 0) parts.push(`allin ${w.a}`);
   if (w.c > 0) parts.push(`${kind === "rfi" ? "limp/call" : "call"} ${w.c}`);
   if (w.f > 0) parts.push(`fold ${w.f}`);
   return parts.join(" / ") || "fold 100";
 }
 
 function categorize(kind, actual, w) {
-  const dom = w.r >= w.c && w.r >= w.f ? "raise" : (w.c >= w.f ? "call" : "fold");
+  const ra = w.r + (w.a || 0);
+  const dom = ra >= w.c && ra >= w.f ? "raise" : (w.c >= w.f ? "call" : "fold");
   if (kind === "rfi") {
     if (actual === "fold") return "RFI 太緊(該 open 沒 open)";
     if (actual === "limp/call") return "RFI 用 limp";
@@ -679,7 +685,10 @@ function categorize(kind, actual, w) {
 function judge(key, hand, kind, actual) {
   // actual in {"raise","call","fold"} weight-space
   const w = cellWeights(key, hand);
-  const freq = actual === "raise" ? w.r : actual === "call" ? w.c : w.f;
+  // a raise in the hand history also covers the all-in weight (GG logs
+  // preflop jams as raises)
+  const freq = actual === "raise" ? w.r + (w.a || 0) :
+               actual === "call" ? w.c : w.f;
   return { ok: freq >= FREQ_OK, w };
 }
 
@@ -946,11 +955,19 @@ function brushWeights() {
   const b = brushSel.value;
   if (b === "r") return { r: 100, c: 0, f: 0 };
   if (b === "c") return { r: 0, c: 100, f: 0 };
+  if (b === "a") return { r: 0, c: 0, f: 0, a: 100 };
   if (b === "f") return { r: 0, c: 0, f: 100 };
   if (b === "mix") {
-    let r = Math.max(0, Math.min(100, +document.getElementById("mixR").value || 0));
-    let c = Math.max(0, Math.min(100 - r, +document.getElementById("mixC").value || 0));
-    return { r, c, f: 100 - r - c };
+    const val = id => Math.max(0, Math.min(100, +document.getElementById(id).value || 0));
+    let r = val("mixR");
+    let c = Math.min(100 - r, val("mixC"));
+    let a = Math.min(100 - r - c, val("mixA"));
+    const fIn = document.getElementById("mixF").value;
+    let f = fIn === "" ? 100 - r - c - a
+                       : Math.min(100 - r - c - a, val("mixF"));
+    const w = { r, c, f };
+    if (a > 0) w.a = a;
+    return w;
   }
   return null; // reset
 }
@@ -1358,7 +1375,8 @@ function catColor(c) {
   if (/^該 call 卻/.test(c)) return "#6bd6ff";
   return "#ffffff";
 }
-const C_RAISE = "#c0392b", C_CALL = "#2e8b57", C_FOLD = "#31537d";
+const C_RAISE = "#c0392b", C_ALLIN = "#7d1f4e", C_CALL = "#2e8b57",
+      C_FOLD = "#31537d";
 const dateFilter = document.getElementById("dateFilter");
 
 function computeData() {
@@ -1657,21 +1675,26 @@ function renderRange() {
       (errs[m.hand] = errs[m.hand] || []).push(m));
   let html = "";
   const combosOf = n => n.length === 2 ? 6 : (n[2] === "s" ? 4 : 12);
-  let comboR = 0, comboC = 0, comboTot = 0;
+  let comboR = 0, comboC = 0, comboA = 0, comboTot = 0;
   for (const name of CLASSES) {
     const w = cellWeights(key, name);
+    const wa = w.a || 0;
     const cmb = combosOf(name);
-    comboR += cmb * w.r / 100; comboC += cmb * w.c / 100; comboTot += cmb;
+    comboR += cmb * w.r / 100; comboC += cmb * w.c / 100;
+    comboA += cmb * wa / 100; comboTot += cmb;
     const stops = [];
     let acc = 0;
     if (w.r > 0) { stops.push(`${C_RAISE} ${acc}% ${acc + w.r}%`); acc += w.r; }
+    if (wa > 0) { stops.push(`${C_ALLIN} ${acc}% ${acc + wa}%`); acc += wa; }
     if (w.c > 0) { stops.push(`${C_CALL} ${acc}% ${acc + w.c}%`); acc += w.c; }
     if (w.f > 0) { stops.push(`${C_FOLD} ${acc}% 100%`); }
     const bg = stops.length > 1 ?
       `linear-gradient(to right, ${stops.join(", ")})` :
-      (w.r === 100 ? C_RAISE : w.c === 100 ? C_CALL : C_FOLD);
+      (w.r === 100 ? C_RAISE : wa === 100 ? C_ALLIN :
+       w.c === 100 ? C_CALL : C_FOLD);
     let inner = name, extra = "",
-        title = `${name}:raise ${w.r} / call ${w.c} / fold ${w.f}`;
+        title = `${name}:raise ${w.r}${wa ? ` / allin ${wa}` : ""}` +
+                ` / call ${w.c} / fold ${w.f}`;
     if (cust[name]) inner += `<span class="custommark">●</span>`;
     const e = errs[name];
     if (e) {
@@ -1696,21 +1719,25 @@ function renderRange() {
   const raiseLbl = key.startsWith("RFI") ? "Open" :
                    key.includes(" vs ") ? "3-Bet" : "4-Bet";
   const callLbl = key.startsWith("RFI") ? "Limp/Call" : "Call";
-  const pR = 100 * comboR / comboTot, pC = 100 * comboC / comboTot;
+  const pR = 100 * comboR / comboTot, pC = 100 * comboC / comboTot,
+        pA = 100 * comboA / comboTot;
   const chip = (sw, lbl, p, n) =>
     `<span class="chip"><span class="sw" style="background:${sw}"></span>` +
     `${lbl} <b>${p.toFixed(1)}%</b><span class="note">${Math.round(n)} combos</span></span>`;
   document.getElementById("rangeStats").innerHTML =
     chip(C_RAISE, raiseLbl, pR, comboR) +
+    (comboA > 0 ? chip(C_ALLIN, "All-in", pA, comboA) : "") +
     chip(C_CALL, callLbl, pC, comboC) +
-    chip(C_FOLD, "Fold", 100 - pR - pC, comboTot - comboR - comboC) +
-    `<span class="chip">進池 <b>${(pR + pC).toFixed(1)}%</b></span>`;
+    chip(C_FOLD, "Fold", 100 - pR - pC - pA,
+         comboTot - comboR - comboC - comboA) +
+    `<span class="chip">進池 <b>${(pR + pC + pA).toFixed(1)}%</b></span>`;
   document.getElementById("customInfo").textContent =
     `此表自訂了 ${Object.keys(cust).length} 格` +
     (DEFAULTS[key] ? "" : "(此情境無預設,從全 fold 開始)");
   const catsHere = [...new Set(D.mistakes.filter(m => m.key === key).map(m => m.cat))];
   document.getElementById("legend").innerHTML =
     `<span class="lg"><span style="background:${C_RAISE}"></span>raise/3bet/4bet</span>` +
+    `<span class="lg"><span style="background:${C_ALLIN}"></span>allin</span>` +
     `<span class="lg"><span style="background:${C_CALL}"></span>call/limp</span>` +
     `<span class="lg"><span style="background:${C_FOLD}"></span>fold</span>` +
     `<span class="lg">● = 自訂格</span>` +
@@ -1879,7 +1906,8 @@ function answerQuestion(act) {
   if (prAnswered || !prCur) return;
   prAnswered = true;
   const w = cellWeights(prCur.key, prCur.hand);
-  const freq = act === "r" ? w.r : act === "c" ? w.c : w.f;
+  const freqOf = a => a === "r" ? w.r + (w.a || 0) : a === "c" ? w.c : w.f;
+  const freq = freqOf(act);
   const ok = freq >= FREQ_OK;
   prScore.tot++; if (ok) prScore.ok++;
   const kind = kindOf(prCur.key);
@@ -1889,7 +1917,7 @@ function answerQuestion(act) {
     ` <span class="note">基準:${weightsLabel(w, kind)}` +
     `(選的動作權重 ${freq}%,≥${FREQ_OK}% 算對)</span>`;
   prActions.querySelectorAll("button").forEach(b => {
-    const f = b.dataset.act === "r" ? w.r : b.dataset.act === "c" ? w.c : w.f;
+    const f = freqOf(b.dataset.act);
     if (b.dataset.act === act)
       b.style.borderColor = ok ? "var(--win)" : "var(--loss)";
     if (f >= FREQ_OK) b.style.background = "var(--accent-soft)";
