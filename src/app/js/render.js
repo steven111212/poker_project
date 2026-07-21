@@ -396,6 +396,9 @@ function showCatDetail(cat) {
   const handsById = loadStore().hands;
   const list = D.mistakes.filter(m => m.cat === cat);
   const panel = document.getElementById("catDetail");
+  document.querySelectorAll("#cats tr.catrow").forEach(tr => {
+    tr.style.background = tr.dataset.cat === cat ? "var(--accent-soft)" : "";
+  });
   if (!list.length) { panel.classList.add("hidden"); return; }
 
   // group by hand x spot to show where this leak concentrates

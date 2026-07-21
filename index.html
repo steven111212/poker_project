@@ -163,6 +163,13 @@
           font-variant-numeric:tabular-nums; }
   .chip .sw { width:10px; height:10px; border-radius:2px;
               display:inline-block; }
+  .panel { position:relative; }
+  .panel > .close { position:absolute; top:8px; right:10px;
+    background:transparent; color:var(--muted); border:none;
+    font-size:16px; padding:2px 6px; cursor:pointer; }
+  .leakgrid { display:grid; grid-template-columns:minmax(260px,380px) 1fr;
+              gap:14px; align-items:start; }
+  @media (max-width:800px) { .leakgrid { grid-template-columns:1fr; } }
   #toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
            background:var(--surface); color:var(--ink);
            border:1px solid var(--accent); border-radius:10px;
@@ -337,11 +344,12 @@
 <div id="diaryList"></div></section>
 
 <section data-pane="review"><h2>Leak types<span class="zh">偏差類型</span></h2>
-<div class="tablewrap" style="max-width:460px;">
+<div class="leakgrid">
+<div class="tablewrap">
 <table id="cats"><thead><tr><th>類型</th><th>次數</th></tr></thead><tbody></tbody></table>
 <p class="note" style="margin:8px 0 0;">點類型可展開明細:哪些牌、什麼位置打錯。</p>
 </div>
-<div id="catDetail" class="panel hidden" style="margin-top:12px;">
+<div id="catDetail" class="panel hidden"></div>
 </div></section>
 
 <section data-pane="review"><h2>Ranges<span class="zh">範圍表(可自訂)</span></h2>
@@ -1864,6 +1872,9 @@ function showCatDetail(cat) {
   const handsById = loadStore().hands;
   const list = D.mistakes.filter(m => m.cat === cat);
   const panel = document.getElementById("catDetail");
+  document.querySelectorAll("#cats tr.catrow").forEach(tr => {
+    tr.style.background = tr.dataset.cat === cat ? "var(--accent-soft)" : "";
+  });
   if (!list.length) { panel.classList.add("hidden"); return; }
 
   // group by hand x spot to show where this leak concentrates
