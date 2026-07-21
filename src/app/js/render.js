@@ -208,13 +208,13 @@ function renderAll() {
     `<td class="${cls(s.bb100)}">${fmt(s.bb100)}</td><td>${s.decisions}</td>` +
     `<td>${s.mist}</td><td><b>${s.rate}%</b></td></tr>`).join("");
 
-  const catsBody = document.querySelector("#cats tbody");
-  catsBody.innerHTML =
+  const catsEl = document.getElementById("cats");
+  catsEl.innerHTML =
     Object.entries(D.cats).sort((a, b) => b[1] - a[1])
-      .map(([c, n]) => `<tr class="catrow" data-cat="${esc(c)}" style="cursor:pointer;">` +
-        `<td>${c}</td><td>${n}</td></tr>`).join("");
-  catsBody.querySelectorAll("tr.catrow").forEach(tr => {
-    tr.onclick = () => showCatDetail(tr.dataset.cat);
+      .map(([c, n]) => `<span class="chip catrow" data-cat="${esc(c)}"` +
+        ` style="cursor:pointer;">${c} <b>${n}</b></span>`).join(" ");
+  catsEl.querySelectorAll(".catrow").forEach(el => {
+    el.onclick = () => showCatDetail(el.dataset.cat);
   });
   document.getElementById("catDetail").classList.add("hidden");
 
@@ -405,9 +405,8 @@ function renderCatDetail(scroll) {
   const handsById = loadStore().hands;
   const list = D.mistakes.filter(m => m.cat === cat);
   const panel = document.getElementById("catDetail");
-  document.querySelectorAll("#cats tr.catrow").forEach(tr => {
-    tr.style.background = tr.dataset.cat === cat ? "var(--accent-soft)" : "";
-  });
+  document.querySelectorAll("#cats .catrow").forEach(el =>
+    el.classList.toggle("active", el.dataset.cat === cat));
   if (!list.length) { panel.classList.add("hidden"); return; }
 
   // group by hand x spot to show where this leak concentrates
@@ -466,8 +465,8 @@ function renderCatDetail(scroll) {
 
   panel.querySelector(".close").onclick = () => {
     panel.classList.add("hidden");
-    document.querySelectorAll("#cats tr.catrow").forEach(tr =>
-      tr.style.background = "");
+    document.querySelectorAll("#cats .catrow").forEach(el =>
+      el.classList.remove("active"));
   };
   panel.querySelectorAll("th[data-sort]").forEach(th => {
     th.onclick = () => {

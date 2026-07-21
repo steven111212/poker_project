@@ -160,9 +160,8 @@
   .panel > .close { position:absolute; top:8px; right:10px;
     background:transparent; color:var(--muted); border:none;
     font-size:16px; padding:2px 6px; cursor:pointer; }
-  .leakgrid { display:grid; grid-template-columns:minmax(260px,380px) 1fr;
-              gap:14px; align-items:start; }
-  @media (max-width:800px) { .leakgrid { grid-template-columns:1fr; } }
+  .chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .chip.active .note, .chip.active b { color:#fff; }
   #toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
            background:var(--surface); color:var(--ink);
            border:1px solid var(--accent); border-radius:10px;
