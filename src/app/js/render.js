@@ -390,7 +390,16 @@ function renderRange() {
       `<span class="lg"><span style="background:${catColor(c)}"></span>${c}</span>`).join("") : "");
 }
 
+const CAT_PAGE_SIZE = 20;
+let catState = { cat: null, sortKey: "date", sortDir: -1, page: 0 };
+
 function showCatDetail(cat) {
+  catState = { cat, sortKey: "date", sortDir: -1, page: 0 };
+  renderCatDetail(true);
+}
+
+function renderCatDetail(scroll) {
+  const { cat, sortKey, sortDir, page } = catState;
   const D = window._D || computeData();
   const notes = loadNotes();
   const handsById = loadStore().hands;
@@ -405,38 +414,82 @@ function showCatDetail(cat) {
   const groups = {};
   for (const m of list) {
     const k = `${m.hand}|${m.key}`;
-    const g = groups[k] = groups[k] || { hand: m.hand, key: m.key, n: 0, bb: 0 };
-    g.n++; g.bb += m.net_bb;
+    const g = groups[k] = groups[k] || { hand: m.hand, key: m.key, n: 0 };
+    g.n++;
   }
-  const top = Object.values(groups).sort((a, b) => b.n - a.n);
-  const chips = top.slice(0, 12).map(g =>
-    `<span class="chip" style="cursor:pointer;" data-key="${esc(g.key)}" data-hand="${g.hand}">` +
-    `${g.hand} <b>×${g.n}</b><span class="note">${g.key}</span></span>`).join(" ");
+  const chips = Object.values(groups).sort((a, b) => b.n - a.n).slice(0, 8)
+    .map(g =>
+      `<span class="chip" style="cursor:pointer;" data-key="${esc(g.key)}" data-hand="${g.hand}">` +
+      `${g.hand} <b>×${g.n}</b><span class="note">${g.key}</span></span>`).join(" ");
+
+  const sorted = [...list].sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
+  });
+  const pages = Math.max(1, Math.ceil(sorted.length / CAT_PAGE_SIZE));
+  const cur = Math.min(page, pages - 1);
+  const rows = sorted.slice(cur * CAT_PAGE_SIZE, (cur + 1) * CAT_PAGE_SIZE);
+
+  const COLS = [["date", "日期"], ["hand", "手牌"], ["pos", "位置"],
+                ["spot", "情境"], ["actual", "你的動作"], ["correct", "基準"],
+                ["net_bb", "結果(bb)"]];
+  const SORTABLE = new Set(["date", "hand", "pos", "spot", "net_bb"]);
+  const thead = COLS.map(([k, label]) => SORTABLE.has(k)
+    ? `<th data-sort="${k}" style="cursor:pointer; white-space:nowrap;">${label}` +
+      `${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`
+    : `<th>${label}</th>`).join("") + "<th></th>";
+
+  const pager = pages > 1
+    ? `<div class="controls" style="margin:10px 0 0;">
+        <button class="mini ghost" data-page="prev" ${cur === 0 ? "disabled" : ""}>‹ 上一頁</button>
+        <span class="note">第 ${cur + 1} / ${pages} 頁(共 ${sorted.length} 筆,每頁 ${CAT_PAGE_SIZE} 筆)</span>
+        <button class="mini ghost" data-page="next" ${cur >= pages - 1 ? "disabled" : ""}>下一頁 ›</button>
+       </div>`
+    : "";
 
   panel.classList.remove("hidden");
   panel.innerHTML =
     `<button class="close" title="關閉" aria-label="關閉">✕</button>` +
     `<b>${esc(cat)}</b> — 共 ${list.length} 次` +
     `<div class="controls" style="margin:10px 0;">${chips}</div>` +
-    `<div class="tablewrap" style="border:none; padding:0;"><table><thead><tr>
-      <th>日期</th><th>手牌</th><th>位置</th><th>情境</th><th>你的動作</th>
-      <th>基準</th><th>結果(bb)</th><th></th></tr></thead><tbody>` +
-    list.map(m =>
+    `<div class="tablewrap" style="border:none; padding:0;">` +
+    `<table><thead><tr>${thead}</tr></thead><tbody>` +
+    rows.map(m =>
       `<tr><td>${m.date}</td><td><b>${m.hand}</b></td><td>${m.pos}</td>` +
       `<td>${m.spot}</td><td>${m.actual}</td><td>${m.correct}</td>` +
       `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td>` +
-      `<td>${(handsById[m.id] || {}).rp ?
+      `<td style="white-space:nowrap;">${(handsById[m.id] || {}).rp ?
           `<button class="mini" data-replay="${m.id}">回顧</button> ` : ""}` +
       `<button class="mini ghost" data-key="${esc(m.key)}" data-hand="${m.hand}">範圍表</button> ` +
       `<button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`
-    ).join("") + `</tbody></table></div>`;
-  panel.querySelector(".close").onclick = () => panel.classList.add("hidden");
-  panel.querySelectorAll("[data-key]").forEach(el => {
+    ).join("") + `</tbody></table></div>` + pager;
+
+  panel.querySelector(".close").onclick = () => {
+    panel.classList.add("hidden");
+    document.querySelectorAll("#cats tr.catrow").forEach(tr =>
+      tr.style.background = "");
+  };
+  panel.querySelectorAll("th[data-sort]").forEach(th => {
+    th.onclick = () => {
+      const k = th.dataset.sort;
+      if (catState.sortKey === k) catState.sortDir *= -1;
+      else { catState.sortKey = k; catState.sortDir = k === "date" ? -1 : 1; }
+      catState.page = 0;
+      renderCatDetail(false);
+    };
+  });
+  panel.querySelectorAll("button[data-page]").forEach(b => {
+    b.onclick = () => {
+      catState.page = cur + (b.dataset.page === "next" ? 1 : -1);
+      renderCatDetail(false);
+    };
+  });
+  panel.querySelectorAll(".chip[data-key], button[data-key]").forEach(el => {
     el.onclick = () => jumpToRange(el.dataset.key, el.dataset.hand);
   });
   wireNoteButtons(panel);
   wireReplayButtons(panel);
-  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  if (scroll) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function showHandDetail(hand) {
