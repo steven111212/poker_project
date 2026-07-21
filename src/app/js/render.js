@@ -208,9 +208,15 @@ function renderAll() {
     `<td class="${cls(s.bb100)}">${fmt(s.bb100)}</td><td>${s.decisions}</td>` +
     `<td>${s.mist}</td><td><b>${s.rate}%</b></td></tr>`).join("");
 
-  document.querySelector("#cats tbody").innerHTML =
+  const catsBody = document.querySelector("#cats tbody");
+  catsBody.innerHTML =
     Object.entries(D.cats).sort((a, b) => b[1] - a[1])
-      .map(([c, n]) => `<tr><td>${c}</td><td>${n}</td></tr>`).join("");
+      .map(([c, n]) => `<tr class="catrow" data-cat="${esc(c)}" style="cursor:pointer;">` +
+        `<td>${c}</td><td>${n}</td></tr>`).join("");
+  catsBody.querySelectorAll("tr.catrow").forEach(tr => {
+    tr.onclick = () => showCatDetail(tr.dataset.cat);
+  });
+  document.getElementById("catDetail").classList.add("hidden");
 
   let cells = "";
   for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
@@ -382,6 +388,52 @@ function renderRange() {
     `<span class="lg">● = 自訂格</span>` +
     (showErr.checked ? catsHere.map(c =>
       `<span class="lg"><span style="background:${catColor(c)}"></span>${c}</span>`).join("") : "");
+}
+
+function showCatDetail(cat) {
+  const D = window._D || computeData();
+  const notes = loadNotes();
+  const handsById = loadStore().hands;
+  const list = D.mistakes.filter(m => m.cat === cat);
+  const panel = document.getElementById("catDetail");
+  if (!list.length) { panel.classList.add("hidden"); return; }
+
+  // group by hand x spot to show where this leak concentrates
+  const groups = {};
+  for (const m of list) {
+    const k = `${m.hand}|${m.key}`;
+    const g = groups[k] = groups[k] || { hand: m.hand, key: m.key, n: 0, bb: 0 };
+    g.n++; g.bb += m.net_bb;
+  }
+  const top = Object.values(groups).sort((a, b) => b.n - a.n);
+  const chips = top.slice(0, 12).map(g =>
+    `<span class="chip" style="cursor:pointer;" data-key="${esc(g.key)}" data-hand="${g.hand}">` +
+    `${g.hand} <b>×${g.n}</b><span class="note">${g.key}</span></span>`).join(" ");
+
+  panel.classList.remove("hidden");
+  panel.innerHTML =
+    `<button class="close" title="關閉" aria-label="關閉">✕</button>` +
+    `<b>${esc(cat)}</b> — 共 ${list.length} 次` +
+    `<div class="controls" style="margin:10px 0;">${chips}</div>` +
+    `<div class="tablewrap" style="border:none; padding:0;"><table><thead><tr>
+      <th>日期</th><th>手牌</th><th>位置</th><th>情境</th><th>你的動作</th>
+      <th>基準</th><th>結果(bb)</th><th></th></tr></thead><tbody>` +
+    list.map(m =>
+      `<tr><td>${m.date}</td><td><b>${m.hand}</b></td><td>${m.pos}</td>` +
+      `<td>${m.spot}</td><td>${m.actual}</td><td>${m.correct}</td>` +
+      `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td>` +
+      `<td>${(handsById[m.id] || {}).rp ?
+          `<button class="mini" data-replay="${m.id}">回顧</button> ` : ""}` +
+      `<button class="mini ghost" data-key="${esc(m.key)}" data-hand="${m.hand}">範圍表</button> ` +
+      `<button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`
+    ).join("") + `</tbody></table></div>`;
+  panel.querySelector(".close").onclick = () => panel.classList.add("hidden");
+  panel.querySelectorAll("[data-key]").forEach(el => {
+    el.onclick = () => jumpToRange(el.dataset.key, el.dataset.hand);
+  });
+  wireNoteButtons(panel);
+  wireReplayButtons(panel);
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function showHandDetail(hand) {
