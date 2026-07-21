@@ -25,6 +25,32 @@ function aiRangeContext(key, hand) {
 }
 
 const AI_ST_NAME = { p: "翻前", f: "翻牌", t: "轉牌", r: "河牌" };
+const AI_SUIT = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const aiCard = c => c[0] + AI_SUIT[c[1]];
+
+// precomputed suit facts so the model cannot hallucinate flushes
+function aiSuitFacts(rp) {
+  if (!rp.b.length) return "";
+  const cnt = { s: 0, h: 0, d: 0, c: 0 };
+  rp.b.forEach(c => cnt[c[1]]++);
+  const boardTxt = Object.entries(cnt).filter(([, n]) => n)
+    .map(([k, n]) => `${AI_SUIT[k]} ${n}張`).join("、");
+  const [c1, c2] = rp.hc;
+  let mine;
+  if (c1[1] === c2[1]) {
+    const n = cnt[c1[1]];
+    mine = `我的兩張手牌同為${AI_SUIT[c1[1]]},牌面${AI_SUIT[c1[1]]}共 ${n} 張` +
+      `(手牌+牌面合計 ${n + 2} 張)→ 我${n >= 3 ? "有" : "【沒有】"}同花`;
+  } else {
+    const n1 = cnt[c1[1]], n2 = cnt[c2[1]];
+    mine = `我的兩張手牌花色不同(${AI_SUIT[c1[1]]} 與 ${AI_SUIT[c2[1]]})` +
+      `→ 我${(n1 >= 4 || n2 >= 4) ? "有" : "【沒有】"}同花`;
+  }
+  const bd = Object.entries(cnt).find(([, n]) => n >= 3);
+  return `花色事實(程式計算,絕對正確;分析涉及同花時必須以此為準):` +
+    `牌面花色 ${boardTxt};${mine}` +
+    `${bd ? `;牌面${AI_SUIT[bd[0]]}有 ${bd[1]} 張,對手可能持有${AI_SUIT[bd[0]]}同花` : ";牌面無三張同花色,任何人都不可能成同花"}。\n`;
+}
 const AI_KIND = { fold: "棄牌", check: "過牌", call: "跟注", bet: "下注",
                   raise: "加注到", post_sb: "小盲", post_bb: "大盲" };
 
@@ -56,12 +82,17 @@ function buildHandPrompt(rec) {
 3. 翻前請對照我提供的基準範圍表判斷;翻後沒有基準表,請用範圍推理。
 4. 指出 1~3 個最關鍵的決策點,如果有更好的替代打法請說明並解釋原因;打得好的地方也要肯定。
 5. 最後給一段 2~3 句的總結。全文控制在 500 字以內,直接講重點。
+6. 成牌判讀必須以下方「花色事實」為準——那是程式算好的,絕對正確。若你的推理與它衝突,是你看錯牌,請重新核對。禁止聲稱不存在的同花/順子/葫蘆。
 
 === 牌局資料(NL${Math.round(rec.bb * 100)},盲注 $${rec.bb / 2}/$${rec.bb}) ===
-我的位置:${rec.pos},手牌:${rp.hc.join(" ")}(${rec.hc})
+我的位置:${rec.pos},手牌:${rp.hc.map(aiCard).join(" ")}(${rec.hc})
 起始籌碼:${stacks}
-公共牌:${rp.b.length ? rp.b.join(" ") : "(未見翻牌)"}
-${pots ? pots + "\n" : ""}動作順序:
+公共牌:${rp.b.length
+    ? `翻牌 ${rp.b.slice(0, 3).map(aiCard).join(" ")}` +
+      (rp.b[3] ? ` / 轉牌 ${aiCard(rp.b[3])}` : "") +
+      (rp.b[4] ? ` / 河牌 ${aiCard(rp.b[4])}` : "")
+    : "(未見翻牌)"}
+${aiSuitFacts(rp)}${pots ? pots + "\n" : ""}動作順序:
 ${acts}
 結果:我${bbAmt >= 0 ? "贏" : "輸"} ${Math.abs(bbAmt)} bb${rp.tp ? `,總底池 $${rp.tp}` : ""}
 ${Object.keys(rp.sh).length ? "攤牌:" + Object.entries(rp.sh).map(([p, c]) => `${p} 亮出 ${c.join(" ")}`).join("、") : ""}
@@ -104,17 +135,6 @@ document.getElementById("rpAI").onclick = () => {
   const rec = loadStore().hands[rpOpenId];
   if (!rec || !rec.rp) return;
   askAI(buildHandPrompt(rec), document.getElementById("rpAIout"));
-};
-document.getElementById("rpCopy").onclick = async () => {
-  if (!rpOpenId) return;
-  const rec = loadStore().hands[rpOpenId];
-  if (!rec || !rec.rp) return;
-  try {
-    await navigator.clipboard.writeText(buildHandPrompt(rec));
-    showToast("✅ 提示詞已複製,貼到任何 AI 聊天視窗即可分析");
-  } catch {
-    document.getElementById("rpAIout").textContent = buildHandPrompt(rec);
-  }
 };
 
 // settings UI (data tab)
