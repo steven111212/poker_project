@@ -30,6 +30,22 @@
 </div>
 </section>
 
+<section data-pane="data">
+<h2>AI<span class="zh">AI 分析設定</span></h2>
+<div class="panel">
+  <div class="controls">
+    <label>DeepSeek API Key
+      <input type="password" id="aiKey" style="width:280px;" placeholder="sk-..."></label>
+    <label>模型 <input type="text" id="aiModel" style="width:150px;"></label>
+    <button id="aiSave">儲存</button>
+    <span class="note" id="aiMsg"></span>
+  </div>
+  <p class="note" style="margin:8px 0 0;">Key 只存在你這台瀏覽器的 localStorage,
+  不會寫進程式碼、不會上傳 GitHub。沒設定 key 也能在牌局回顧按「複製提示詞」,
+  貼到任何 AI 聊天視窗分析。</p>
+</div>
+</section>
+
 <section data-pane="overview">
 <h2>Goal<span class="zh">升級目標</span></h2>
 <div class="panel">
@@ -212,6 +228,13 @@
     </div>
     <div class="rp-felt" id="rpFelt"></div>
     <div class="rp-streets" id="rpStreets"></div>
+    <div class="controls" style="margin:14px 0 0;">
+      <button id="rpAI">🤖 AI 分析牌局</button>
+      <button class="ghost" id="rpCopy">複製提示詞</button>
+      <span class="note">分析會附上你的翻前範圍,並要求 AI 不以輸贏結果評判</span>
+    </div>
+    <div id="rpAIout" style="white-space:pre-wrap; margin-top:10px;
+         font-size:13.5px; line-height:1.7;"></div>
   </div>
 </div>
 

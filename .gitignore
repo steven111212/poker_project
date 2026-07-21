@@ -3,6 +3,10 @@ hands/
 report.md
 *.xls
 
+# secrets — NEVER commit
+.env
+.env.*
+
 # python
 __pycache__/
 *.pyc

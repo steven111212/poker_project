@@ -75,6 +75,7 @@ function openReplay(id) {
       `<span class="note" style="color:#cfe3d8;">未見翻牌</span>`}</div>` +
     `<div class="rp-pot">${rp.tp ? "總底池 " + money(rp.tp) : ""}</div>`;
   document.getElementById("rpStreets").innerHTML = rpStreets(rec, rp);
+  document.getElementById("rpAIout").textContent = "";
   rpModal.classList.remove("hidden");
 }
 

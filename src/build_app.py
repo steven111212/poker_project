@@ -36,6 +36,7 @@ JS_ORDER = [
     "diary",         # session diary
     "backup",        # full export / import
     "replay",        # N8-style hand replay modal
+    "ai",            # DeepSeek hand analysis (user-supplied key)
     "render",        # all dashboard rendering
     "trainer",       # preflop practice quiz
     "tabs",          # tab navigation + boot
