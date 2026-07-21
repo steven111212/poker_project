@@ -156,6 +156,13 @@
           font-variant-numeric:tabular-nums; }
   .chip .sw { width:10px; height:10px; border-radius:2px;
               display:inline-block; }
+  #toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
+           background:var(--surface); color:var(--ink);
+           border:1px solid var(--accent); border-radius:10px;
+           padding:10px 20px; font-size:13.5px; z-index:60;
+           box-shadow:0 4px 16px rgba(0,0,0,.35); opacity:0;
+           pointer-events:none; transition:opacity .25s; }
+  #toast.show { opacity:1; }
   #replayModal { position:fixed; inset:0; background:rgba(0,0,0,.6);
                  z-index:50; display:flex; align-items:center;
                  justify-content:center; padding:18px; }

@@ -163,6 +163,13 @@
           font-variant-numeric:tabular-nums; }
   .chip .sw { width:10px; height:10px; border-radius:2px;
               display:inline-block; }
+  #toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%);
+           background:var(--surface); color:var(--ink);
+           border:1px solid var(--accent); border-radius:10px;
+           padding:10px 20px; font-size:13.5px; z-index:60;
+           box-shadow:0 4px 16px rgba(0,0,0,.35); opacity:0;
+           pointer-events:none; transition:opacity .25s; }
+  #toast.show { opacity:1; }
   #replayModal { position:fixed; inset:0; background:rgba(0,0,0,.6);
                  z-index:50; display:flex; align-items:center;
                  justify-content:center; padding:18px; }
@@ -420,6 +427,8 @@
 <div id="notesList"><p class="note">在熱力圖詳情或偏差清單點「＋筆記」,幫任何一手牌寫下檢討。</p></div>
 </section>
 </div>
+
+<div id="toast" role="status"></div>
 
 <div id="replayModal" class="hidden">
   <div class="rp-box">
@@ -929,10 +938,25 @@ async function importFiles(fileList) {
     }
   }
   saveStore(store);
-  statusEl.textContent = `完成:新增 ${added} 手` +
-    (upgraded ? `,升級 ${upgraded} 手舊資料(補上 HUD 統計)` : "") +
+  const msg = `完成:新增 ${added} 手` +
+    (upgraded ? `,升級 ${upgraded} 手舊資料` : "") +
     `,略過重複 ${dup} 手(檔案共 ${total} 手)`;
+  statusEl.textContent = msg;
   renderAll();
+  if (added || upgraded) {   // jump to the dashboard so the result is visible
+    switchTab("overview");
+    window.scrollTo({ top: 0 });
+    showToast("✅ " + msg);
+  }
+}
+
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 5000);
 }
 
 drop.onclick = () => fileInput.click();

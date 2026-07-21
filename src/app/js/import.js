@@ -25,10 +25,25 @@ async function importFiles(fileList) {
     }
   }
   saveStore(store);
-  statusEl.textContent = `完成:新增 ${added} 手` +
-    (upgraded ? `,升級 ${upgraded} 手舊資料(補上 HUD 統計)` : "") +
+  const msg = `完成:新增 ${added} 手` +
+    (upgraded ? `,升級 ${upgraded} 手舊資料` : "") +
     `,略過重複 ${dup} 手(檔案共 ${total} 手)`;
+  statusEl.textContent = msg;
   renderAll();
+  if (added || upgraded) {   // jump to the dashboard so the result is visible
+    switchTab("overview");
+    window.scrollTo({ top: 0 });
+    showToast("✅ " + msg);
+  }
+}
+
+let toastTimer = null;
+function showToast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 5000);
 }
 
 drop.onclick = () => fileInput.click();
