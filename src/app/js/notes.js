@@ -61,7 +61,7 @@ function renderNotes() {
     return da < db ? 1 : da > db ? -1 : (a < b ? 1 : -1);
   });
   if (!ids.length) {
-    list.innerHTML = `<p class="note">在熱力圖詳情或偏差清單點「＋筆記」,幫任何一手牌寫下檢討。</p>`;
+    list.innerHTML = `<p class="note">在熱力圖詳情或偏差類型明細點「＋筆記」,幫任何一手牌寫下檢討。</p>`;
     return;
   }
   list.innerHTML = ids.map(id => {

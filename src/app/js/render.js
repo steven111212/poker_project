@@ -15,7 +15,6 @@ function catColor(c) {
 }
 const C_RAISE = "#c0392b", C_ALLIN = "#7d1f4e", C_CALL = "#2e8b57",
       C_FOLD = "#31537d";
-const dateFilter = document.getElementById("dateFilter");
 
 function computeData() {
   const store = loadStore();
@@ -209,7 +208,10 @@ function renderAll() {
     `<td>${s.mist}</td><td><b>${s.rate}%</b></td></tr>`).join("");
 
   const catsEl = document.getElementById("cats");
+  const totalMist = D.mistakes.length;
   catsEl.innerHTML =
+    (totalMist ? `<span class="chip catrow" data-cat="__all__"` +
+      ` style="cursor:pointer;">全部 <b>${totalMist}</b></span> ` : "") +
     Object.entries(D.cats).sort((a, b) => b[1] - a[1])
       .map(([c, n]) => `<span class="chip catrow" data-cat="${esc(c)}"` +
         ` style="cursor:pointer;">${c} <b>${n}</b></span>`).join(" ");
@@ -243,7 +245,7 @@ function renderAll() {
 
   renderProfileSel();
   refreshSpotOptions();
-  renderPicker(); renderMistakes(true);
+  renderPicker();
   renderJournal(D); renderNotes();
 }
 
@@ -403,7 +405,8 @@ function renderCatDetail(scroll) {
   const D = window._D || computeData();
   const notes = loadNotes();
   const handsById = loadStore().hands;
-  const list = D.mistakes.filter(m => m.cat === cat);
+  const isAll = cat === "__all__";
+  const list = isAll ? D.mistakes : D.mistakes.filter(m => m.cat === cat);
   const panel = document.getElementById("catDetail");
   document.querySelectorAll("#cats .catrow").forEach(el =>
     el.classList.toggle("active", el.dataset.cat === cat));
@@ -431,8 +434,9 @@ function renderCatDetail(scroll) {
 
   const COLS = [["date", "日期"], ["hand", "手牌"], ["pos", "位置"],
                 ["spot", "情境"], ["actual", "你的動作"], ["correct", "基準"],
+                ...(isAll ? [["cat", "類型"]] : []),
                 ["net_bb", "結果(bb)"]];
-  const SORTABLE = new Set(["date", "hand", "pos", "spot", "net_bb"]);
+  const SORTABLE = new Set(["date", "hand", "pos", "spot", "net_bb", "cat"]);
   const thead = COLS.map(([k, label]) => SORTABLE.has(k)
     ? `<th data-sort="${k}" style="cursor:pointer; white-space:nowrap;">${label}` +
       `${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`
@@ -449,13 +453,14 @@ function renderCatDetail(scroll) {
   panel.classList.remove("hidden");
   panel.innerHTML =
     `<button class="close" title="關閉" aria-label="關閉">✕</button>` +
-    `<b>${esc(cat)}</b> — 共 ${list.length} 次` +
+    `<b>${isAll ? "全部偏差" : esc(cat)}</b> — 共 ${list.length} 次` +
     `<div class="controls" style="margin:10px 0;">${chips}</div>` +
     `<div class="tablewrap" style="border:none; padding:0;">` +
     `<table><thead><tr>${thead}</tr></thead><tbody>` +
     rows.map(m =>
       `<tr><td>${m.date}</td><td><b>${m.hand}</b></td><td>${m.pos}</td>` +
       `<td>${m.spot}</td><td>${m.actual}</td><td>${m.correct}</td>` +
+      (isAll ? `<td>${m.cat}</td>` : "") +
       `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td>` +
       `<td style="white-space:nowrap;">${(handsById[m.id] || {}).rp ?
           `<button class="mini" data-replay="${m.id}">回顧</button> ` : ""}` +
@@ -535,31 +540,5 @@ function jumpToRange(key, hand) {
   }
 }
 
-function renderMistakes(rebuildFilter) {
-  const D = window._D || computeData();
-  if (rebuildFilter) {
-    const cur = dateFilter.value;
-    dateFilter.innerHTML = `<option value="">全部期別</option>` +
-      [...new Set(D.mistakes.map(m => m.date))].map(d =>
-        `<option value="${d}">${d}</option>`).join("");
-    dateFilter.value = cur || "";
-  }
-  const f = dateFilter.value;
-  const notes = loadNotes();
-  const handsById = loadStore().hands;
-  const tbody = document.querySelector("#mistakes tbody");
-  tbody.innerHTML = D.mistakes
-    .filter(m => !f || m.date === f)
-    .map(m => `<tr><td>${m.date}</td><td>${m.hand}</td><td>${m.pos}</td><td>${m.spot}</td>` +
-      `<td>${m.actual}</td><td>${m.correct}</td><td>${m.cat}</td>` +
-      `<td class="${cls(m.net_bb)}">${fmt(m.net_bb)}</td><td>${m.id}</td>` +
-      `<td>${(handsById[m.id] || {}).rp ?
-          `<button class="mini" data-replay="${m.id}">回顧</button> ` : ""}` +
-      `<button class="mini ghost" data-note="${m.id}">${noteLabel(notes, m.id)}</button></td></tr>`).join("");
-  wireNoteButtons(tbody);
-  wireReplayButtons(tbody);
-}
-
 spotSel.onchange = renderRange;
 showErr.onchange = renderRange;
-dateFilter.onchange = () => renderMistakes(false);
