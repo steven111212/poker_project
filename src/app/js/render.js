@@ -143,7 +143,10 @@ function renderHUD(D) {
 
 function renderAll() {
   const D = window._D = computeData();
-  document.getElementById("storeInfo").textContent = `目前已儲存 ${D.hands.length} 手`;
+  const usedKB = Math.round(
+    (localStorage.getItem(STORE_KEY) || "").length / 1024);
+  document.getElementById("storeInfo").textContent =
+    `目前已儲存 ${D.hands.length} 手(佔用約 ${usedKB} KB / 上限約 5000 KB)`;
 
   const g = loadGoal();
   goalStake.value = String(g.bb); goalTarget.value = g.target;

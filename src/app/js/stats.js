@@ -83,8 +83,16 @@ function replayData(h) {
   };
 }
 
-// hands are stored raw-ish so ranges can be re-evaluated after edits
+// hands are stored raw-ish so ranges can be re-evaluated after edits.
+// replay data (rp) is kept only for hands hero actually played — preflop
+// insta-folds have no review value and would blow the localStorage quota.
 function storedRecord(h) {
+  const rec = storedRecordBase(h);
+  if (rec.st.v || rec.st.sf) rec.rp = replayData(h);
+  return rec;
+}
+
+function storedRecordBase(h) {
   const hc = classify(h.cards[0], h.cards[1]);
   const [spot, opener, action] = preflopSpot(h);
   const [tb, resp] = vs3betSpot(h);
@@ -93,7 +101,7 @@ function storedRecord(h) {
            rk: h.collected > 0 ? Math.round(h.rake * 100) / 100 : 0,
            pf: [spot, opener ? (h.posOf[opener] || "") : null, action],
            tb: [tb ? (h.posOf[tb] || "") : null, resp],
-           st: statFlags(h), rp: replayData(h) };
+           st: statFlags(h) };
 }
 
 function decisionsOf(rec) {
